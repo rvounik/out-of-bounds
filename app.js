@@ -3,7 +3,7 @@ import BitmapSlice from './components/BitmapSlice.js';
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
 const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
-const resolution = 10; // how many pixels high should each bitmap slice be? (the lower, the more detail)
+const resolution = 2; // how many pixels high should each bitmap slice be? (the lower, the more detail)
 const projectionHeight = 300; // half of 800x600
 let offset = 0; // initial value of image offset within each slice
 
