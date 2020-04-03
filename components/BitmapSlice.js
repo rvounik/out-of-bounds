@@ -13,10 +13,10 @@ export default class BitmapSlice {
 
         context.drawImage(
             this.imageId['img'],
-            0, (this.y * resolution) - offset + 300,
+            0, 0 - (1000 * (resolution / this.y)) - (offset % 300) + 600,
             800, resolution,
-            400 - (this.y * 3 * 3), 300 + (this.y * resolution),
-            this.y * 3 * 3 * resolution, resolution
+            400 - ((this.y * 10) * 3), 300 + (this.y * resolution),
+            ((this.y * 10) * 3) * resolution, resolution
         );
     }
 }

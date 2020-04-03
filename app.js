@@ -60,7 +60,7 @@ function init() {
 function drawBitmapSlices() {
 
     // give it an interesting offset
-    offset += 0.5;
+    offset += 1;
 
 	// draw all instantiated bitmapSlices
 	bitmapSlices.forEach(bitmapSlice => {
