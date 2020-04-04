@@ -1,22 +1,20 @@
 export default class BitmapSlice {
-	constructor(x, y, w, h, context, imageId) {
-		this.x = x;
+	constructor(y, context, imageId) {
 		this.y = y;
-		this.w = w;
-		this.h = h;
 		this.context = context;
 		this.imageId = imageId;
+
+		this.fieldOfVision = 2500; // the higher this number, the less the 'banding' effect at the bottom of the screen, but the 'higher' the camera appears
+		this.narrowNess = 1;
 	}
 
 	draw(offset, resolution) {
-		const context = this.context;
-
-        context.drawImage(
+        this.context.drawImage(
             this.imageId['img'],
-            0, 0 - (1000 * (resolution / this.y)) - (offset % 300) + 600,
+            0, 0 - (this.fieldOfVision * (resolution / this.y)) - (offset % 2000) + 2200,
             800, resolution,
-            400 - ((this.y * 10) * 3), 300 + (this.y * resolution),
-            ((this.y * 10) * 3) * resolution, resolution
+            400 - ((this.y * (resolution * 5)) * this.narrowNess), (100 * resolution) + (this.y * resolution),
+            ((this.y * 10) * this.narrowNess) * resolution, resolution
         );
     }
 }

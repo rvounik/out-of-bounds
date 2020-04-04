@@ -1,11 +1,16 @@
 import BitmapSlice from './components/BitmapSlice.js';
+import MiniMap from './components/MiniMap.js';
+import Sky from './components/Sky.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
 const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
-const resolution = 2; // how many pixels high should each bitmap slice be? (the lower, the more detail)
+const resolution = 3; // how many pixels high should each bitmap slice be? (the lower, the more detail)
 const projectionHeight = 300; // half of 800x600
 let offset = 0; // initial value of image offset within each slice
+
+// init the containers that will hold our instances
+let miniMap, sky;
 
 /**
  * Holds all images used in the app
@@ -16,7 +21,12 @@ let offset = 0; // initial value of image offset within each slice
 const images = [
     {
         id: 'texture',
-        src: 'assets/texture.jpg',
+        src: 'assets/hole1.jpg',
+        img: new Image()
+    },
+    {
+        id: 'sky',
+        src: 'assets/sky2.jpg',
         img: new Image()
     }
 ];
@@ -49,18 +59,20 @@ function assetsLoaded() {
 function init() {
 	for (let y = 0; y <= (projectionHeight / resolution); y ++) {
 	    bitmapSlices.push(new BitmapSlice(
-	    	0, y,
-	    	800, resolution,
+	        y,
 	    	context,
 	    	images.filter(img => img.id === 'texture')[0])
 	    );
 	}
+
+	miniMap = new MiniMap(context, images.filter(img => img.id === 'texture')[0]);
+	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
 }
 
 function drawBitmapSlices() {
 
     // give it an interesting offset
-    offset += 1;
+    offset += 3;
 
 	// draw all instantiated bitmapSlices
 	bitmapSlices.forEach(bitmapSlice => {
@@ -69,7 +81,7 @@ function drawBitmapSlices() {
 }
 
 function clearCanvas() {
-	context.fillStyle = '#8888dd';
+	context.fillStyle = '#17411D';
 	context.fillRect(0, 0, 800, 600);
 }
 
@@ -80,7 +92,10 @@ function update() {
 		}
 
         clearCanvas();
+		sky.draw();
         drawBitmapSlices();
+
+        miniMap.draw();
 	}
 
     requestAnimationFrame(() => { update(); });
