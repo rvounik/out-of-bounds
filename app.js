@@ -1,6 +1,9 @@
 import BitmapSlice from './components/BitmapSlice.js';
 import MiniMap from './components/MiniMap.js';
+
+// todo: make this a generic image loader with x,y as props
 import Sky from './components/Sky.js';
+import Title from './components/Title.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
@@ -10,7 +13,7 @@ const projectionHeight = 300; // half of 800x600
 let offset = 0; // initial value of image offset within each slice
 
 // init the containers that will hold our instances
-let miniMap, sky;
+let miniMap, sky, title
 
 /**
  * Holds all images used in the app
@@ -27,6 +30,11 @@ const images = [
     {
         id: 'sky',
         src: 'assets/sky2.jpg',
+        img: new Image()
+    },
+    {
+        id: 'title',
+        src: 'assets/title.png',
         img: new Image()
     }
 ];
@@ -67,6 +75,7 @@ function init() {
 
 	miniMap = new MiniMap(context, images.filter(img => img.id === 'texture')[0]);
 	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
+	title = new Title(context, images.filter(img => img.id === 'title')[0]);
 }
 
 function drawBitmapSlices() {
@@ -93,7 +102,16 @@ function update() {
 
         clearCanvas();
 		sky.draw();
+		title.draw();
+        context.font = "14px Arial";
+
         drawBitmapSlices();
+
+        context.fillStyle='#ffffff';
+        context.fillText("A game by rvo (c) 2020", 600, 180);
+        context.font = "30px Arial";
+        context.fillText("START GAME", 300, 380);
+        context.fillText("OPTIONS", 330, 430);
 
         miniMap.draw();
 	}
