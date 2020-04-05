@@ -8,13 +8,13 @@ export default class BitmapSlice {
 		this.narrowNess = 1;
 	}
 
-	draw(offset, resolution) {
+	draw(cfg) {
         this.context.drawImage(
             this.imageId['img'],
-            0, 0 - (this.fieldOfVision * (resolution / this.y)) - (offset % 2000) + 2200,
-            800, resolution,
-            400 - ((this.y * (resolution * 5)) * this.narrowNess), (100 * resolution) + (this.y * resolution),
-            ((this.y * 10) * this.narrowNess) * resolution, resolution
+            0, 0 - (this.fieldOfVision * (cfg.resolution / this.y)) - (cfg.offset % 2000) + 2200,
+            800, cfg.resolution,
+            400 - ((this.y * (cfg.resolution * 5)) * this.narrowNess), (100 * cfg.resolution) + (this.y * cfg.resolution),
+            ((this.y * 10) * this.narrowNess) * cfg.resolution, cfg.resolution
         );
     }
 }
