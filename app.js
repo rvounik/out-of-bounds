@@ -11,7 +11,6 @@ import Ball from './components/Ball.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
-
 const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
 const resolution = 3; // how many pixels high should each bitmap slice be? (the lower, the more detail)
 const projectionHeight = 300; // half of vertical resolution
@@ -19,12 +18,13 @@ const projectionHeight = 300; // half of vertical resolution
 // init the containers that will hold our instances
 let miniMap, sky, title, ball;
 
-// values that change should be kept in a local state
+// values that change are kept in a local state
 const state = {
     scene: Scenes.LOADING, // which scene is currently active
     musicPlaying: false, // whether music is playing
-    loadingAsset: '', // the currently loading asset
-    offset: 0 // image offset within each slice
+    loadingAsset: '', // the currently preloading asset
+    offset: 0, // image offset within each slice
+    clickableContexts: []
 };
 
 /**
@@ -104,10 +104,11 @@ function assetsLoaded() {
 }
 
 /**
- * instantiate instances from the BitmapSlice class, handing over position, dimension, resolution drawing context
- * and the Image object with the right id
+ * Initialises the engine
  */
 function init() {
+
+    // fill up bitmapSlices with BitmapSlice instances providing position, dimension, resolution, context, image Object
 	for (let y = 0; y <= (projectionHeight / resolution); y ++) {
 	    bitmapSlices.push(new BitmapSlice(
 	        y,
@@ -116,13 +117,17 @@ function init() {
 	    );
 	}
 
+	// construct class objects used throughout the various scenes
 	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0]);
 	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
 	title = new Title(context, images.filter(img => img.id === 'title')[0]);
+
+	// register global event listeners
+    window.addEventListener('click', clickHandler);
 }
 
 /**
- * draw all instantiated bitmapSlices (this basically draws the 3d view)
+ * Draw all instantiated bitmapSlices (this basically draws the 3d view)
  */
 function drawBitmapSlices() {
     bitmapSlices.forEach(bitmapSlice => {
@@ -133,23 +138,57 @@ function drawBitmapSlices() {
 	})
 }
 
+/**
+ * Checks if there is a context provided matching the clicked mouse coordinates, then executes its action
+ */
+function clickHandler() {
+    let mouseX = (event.clientX - document.getElementById("canvas").offsetLeft);
+    let mouseY = (event.clientY - document.getElementById("canvas").offsetTop);
+
+    if (mouseX < 0 || mouseX > 800 || mouseY < 0 || mouseY > 600) {
+        return false;
+    } else {
+        state.clickableContexts.map(clickableContext => {
+            if (mouseX > clickableContext.x
+                && mouseX < clickableContext.x + clickableContext.width
+                && mouseY > clickableContext.y
+                && mouseY < clickableContext.y + clickableContext.height
+            ) { clickableContext.action() }
+        });
+    }
+}
+
+/**
+ * Ensure all assets are loaded (displaying which one is currently handled) before moving to the Title scene
+ */
 function loader() {
-    helpers.Canvas.clearCanvas(context, '#000000');
+    helpers.Canvas.clearCanvas(context);
     helpers.Type.positionedText({ context, text: "LOADING", y: 250 });
     helpers.Type.positionedText({ context, text: state.loadingAsset, y: 280, font: "12px Arial" });
 
-    // show bouncing ball when image is loaded
+    // show bouncing ball animation if available
     if (ball) { ball.draw() }
 
     // switch scene and call init
     if (assetsLoaded() && state.scene !== Scenes.TITLE) {
         init();
-        state.scene = Scenes.TITLE;
+        switchScene(Scenes.TITLE);
     }
 }
 
+/**
+ * Clean up and switch state to the requested scene
+ */
+function switchScene(scene) {
+    state.clickableContexts = [];
+    state.scene = scene;
+}
+
+/**
+ * Perform all timely actions required for the current scene
+ */
 function update() {
-    helpers.Canvas.clearCanvas(context);
+    helpers.Canvas.clearCanvas(context, "#17411D");
 
     switch (state.scene) {
         case Scenes.LOADING:
@@ -160,13 +199,14 @@ function update() {
                 state.musicPlaying = true;
                 helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
             }
-            sky.draw(); // this may be dropped from final version
+            sky.draw(); // todo: this may be dropped from final version
             title.draw();
             context.globalAlpha = .25;
             state.offset+=3;
-            drawBitmapSlices(); // this may be dropped from final version
+            drawBitmapSlices(); // todo: this may be dropped from final version
             context.globalAlpha = 1;
-            helpers.Type.positionedText({ context, text: "A game by rvo (c) 2020", x: 600, y: 180, font: "14px Arial" });
+            helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180,  });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
             helpers.Type.positionedText({ context, text: "START GAME", y: 380 });
             helpers.Type.positionedText({ context, text: "OPTIONS", y: 440 });
             break;
@@ -186,4 +226,5 @@ const ballImage = new Image();
 ballImage.onload = () => { ball = new Ball(context, ballImage) };
 ballImage.src = 'assets/ball.png';
 
+// call the updater
 update();
