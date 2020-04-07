@@ -1,101 +1,102 @@
+// this allows access to context from imported modules, but its not exactly best practice. unsure if this should be used
+// window.context = document.getElementById('canvas').getContext('2d');
+
+import helpers from './helpers/index.js';
+import Scenes from './constants/Scenes.js';
 import BitmapSlice from './components/BitmapSlice.js';
 import MiniMap from './components/MiniMap.js';
-import Scenes from './constants/Scenes.js';
-
 import Sky from './components/Sky.js';
 import Title from './components/Title.js';
 import Ball from './components/Ball.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
+
 const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
 const resolution = 3; // how many pixels high should each bitmap slice be? (the lower, the more detail)
-const projectionHeight = 300; // half of 800x600
-let offset = 0; // initial value of image offset within each slice
+const projectionHeight = 300; // half of vertical resolution
 
 // init the containers that will hold our instances
 let miniMap, sky, title, ball;
 
+// values that change should be kept in a local state
 const state = {
-    scene: Scenes.LOADING,
-    musicPlaying: false,
-    loadingAsset: ''
+    scene: Scenes.LOADING, // which scene is currently active
+    musicPlaying: false, // whether music is playing
+    loadingAsset: '', // the currently loading asset
+    offset: 0 // image offset within each slice
 };
 
 /**
  * Holds all images used in the app
  * @param {string} id - id to refer to the image
  * @param {string} src - path to the image
- * @param {Object} img - the image object created after initialisation
  */
 const images = [
     {
         id: 'ball',
-        src: 'assets/ball.png',
-        img: new Image()
+        src: 'assets/ball.png'
     },
     {
         id: 'hole1',
-        src: 'assets/hole1.jpg',
-        img: new Image()
+        src: 'assets/hole1.jpg'
     },
     {
         id: 'sky',
-        src: 'assets/sky.jpg',
-        img: new Image()
+        src: 'assets/sky.jpg'
     },
     {
         id: 'title',
-        src: 'assets/title.png',
-        img: new Image()
+        src: 'assets/title.png'
     }
 ];
 
 /**
- * Loads image asset to each image object inside images
+ * Attaches Image object to each image and sets its source
  */
 images.map(image => {
-   image['img'].src = image['src']
+    image.img = new Image();
+    image['img'].src = image['src'];
 });
 
 /**
  * Holds all sounds used in the app
  * @param {string} id - id to refer to the image
  * @param {string} src - path to the image
- * @param {Object} audio - the audio object created after initialisation
  */
 const sounds = [
     {
         id: 'title_music',
-        src: 'assets/golf_short.wav',
-        audio: new Audio()
+        src: 'assets/golf_short.wav'
     }
 ];
 
 /**
- * Loads sound asset to each sound object inside sounds
+ * Attaches Audio object to each sound and sets its source
  */
 sounds.map(sound => {
+    sound.audio = new Audio();
+    sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices
     sound.audio.src = sound.src;
-    sound.audio.preload = "auto";
 });
 
 /**
- * Checks to see if all image assets are loading by checking the dimensions of the loaded bitmap
+ * Checks to see if all assets are loaded
  * @returns {boolean} assetsLoaded
  */
 function assetsLoaded() {
-    for (let loadedBitmap = 0; loadedBitmap < images.length; loadedBitmap ++) {
-        if (!images[loadedBitmap] || images[loadedBitmap].img.naturalWidth <= 0) {
-            state.loadingAsset = images[loadedBitmap].src;
-	        return false;
-        }
-    }
-
     for (let loadedSound = 0; loadedSound < sounds.length; loadedSound ++) {
         if (!sounds[loadedSound].audio || !sounds[loadedSound].audio.duration) {
             state.loadingAsset = sounds[loadedSound].src;
             return false;
+        }
+    }
+
+    // since sounds are often partially loaded depending on browser, check for images last
+    for (let loadedBitmap = 0; loadedBitmap < images.length; loadedBitmap ++) {
+        if (!images[loadedBitmap] || images[loadedBitmap].img.naturalWidth <= 0) {
+            state.loadingAsset = images[loadedBitmap].src;
+	        return false;
         }
     }
 
@@ -120,82 +121,35 @@ function init() {
 	title = new Title(context, images.filter(img => img.id === 'title')[0]);
 }
 
-function playSound(sound, loop = false) {
-    const soundToPlay = sounds.filter(soundObj => soundObj.id === sound);
-
-    if (loop) {
-        soundToPlay[0].audio.loop = true;
-
-        // experimental attempt to shave a few ms off the duration in order to force a more seamless loop
-        soundToPlay[0].audio.addEventListener('timeupdate', function() {
-        let buffer = .275; // a bit magic
-        if (soundToPlay[0].audio.currentTime > soundToPlay[0].audio.duration - buffer) {
-
-            // restart sound (this does not use the built-in loop function since that is bugged)
-            soundToPlay[0].audio.currentTime = 0;
-            soundToPlay[0].audio.position = 0;
-            soundToPlay[0].audio.play();
-        }
-        }, false);
-    }
-
-    soundToPlay[0].audio.muted = false;
-    soundToPlay[0].audio.play();
-}
-
-function stopSound(sound) {
-    const soundToStop = sounds.filter(soundObj => soundObj.id === sound);
-    soundToStop[0].audio.position = 0;
-    soundToStop[0].audio.muted = true;
-}
-
+/**
+ * draw all instantiated bitmapSlices (this basically draws the 3d view)
+ */
 function drawBitmapSlices() {
-
-    const cfg = {
-        offset: offset+=3,
-        resolution
-    };
-
-	// draw all instantiated bitmapSlices
-	bitmapSlices.forEach(bitmapSlice => {
-        bitmapSlice.draw(cfg);
+    bitmapSlices.forEach(bitmapSlice => {
+        bitmapSlice.draw({
+            offset: state.offset,
+            resolution
+        });
 	})
 }
 
 function loader() {
-
-    clearCanvas('#000000');
-    context.font = "30px Arial";
-    context.fillStyle='#ffffff';
-    context.fillText("LOADING", (800 / 2) - (context.measureText("LOADING").width / 2), 250);
-
-    context.font = "12px Arial";
-    context.fillStyle='#ffffff';
-    context.fillText(state.loadingAsset, (800 / 2) - (context.measureText(state.loadingAsset).width / 2), 280);
+    helpers.Canvas.clearCanvas(context, '#000000');
+    helpers.Type.positionedText({ context, text: "LOADING", y: 250 });
+    helpers.Type.positionedText({ context, text: state.loadingAsset, y: 280, font: "12px Arial" });
 
     // show bouncing ball when image is loaded
-    if (ball) {
-        ball.draw();
-    }
+    if (ball) { ball.draw() }
 
-    if (assetsLoaded()) {
-        if (!bitmapSlices.length) {
-            init(); // fill array with slices once
-        } else {
-            state.scene = Scenes.TITLE; // switch to title
-        }
+    // switch scene and call init
+    if (assetsLoaded() && state.scene !== Scenes.TITLE) {
+        init();
+        state.scene = Scenes.TITLE;
     }
-}
-
-function clearCanvas(color = '#17411D') {
-	context.fillStyle = color;
-	context.fillRect(0, 0, 800, 600);
 }
 
 function update() {
-    clearCanvas();
-
-    drawBitmapSlices();
+    helpers.Canvas.clearCanvas(context);
 
     switch (state.scene) {
         case Scenes.LOADING:
@@ -204,20 +158,17 @@ function update() {
         case Scenes.TITLE:
             if (!state.musicPlaying) {
                 state.musicPlaying = true;
-                playSound('title_music', true);
+                helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
             }
-            clearCanvas();
             sky.draw(); // this may be dropped from final version
             title.draw();
-            context.font = "14px Arial";
-            context.globalAlpha = .3;
+            context.globalAlpha = .25;
+            state.offset+=3;
             drawBitmapSlices(); // this may be dropped from final version
             context.globalAlpha = 1;
-            context.fillStyle='#ffffff';
-            context.fillText("A game by rvo (c) 2020", 600, 180);
-            context.font = "30px Arial";
-            context.fillText("START GAME", (800 / 2) - (context.measureText("START GAME").width / 2), 440);
-            context.fillText("OPTIONS", (800 / 2) - (context.measureText("OPTIONS").width / 2), 490);
+            helpers.Type.positionedText({ context, text: "A game by rvo (c) 2020", x: 600, y: 180, font: "14px Arial" });
+            helpers.Type.positionedText({ context, text: "START GAME", y: 380 });
+            helpers.Type.positionedText({ context, text: "OPTIONS", y: 440 });
             break;
         case Scenes.GAME:
             drawBitmapSlices();
@@ -230,8 +181,8 @@ function update() {
     requestAnimationFrame(() => { update(); });
 }
 
-// init ball graphic outside of image creation loop so it shows in the loader
-let ballImage = new Image();
+// init ball graphic outside of image creation loop so it can be used in the loader
+const ballImage = new Image();
 ballImage.onload = () => { ball = new Ball(context, ballImage) };
 ballImage.src = 'assets/ball.png';
 
