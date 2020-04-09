@@ -7,16 +7,21 @@ import BitmapSlice from './components/BitmapSlice.js';
 import MiniMap from './components/MiniMap.js';
 import Sky from './components/Sky.js';
 import Title from './components/Title.js';
+import Golfer from './components/Golfer.js';
 import Ball from './components/Ball.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
 const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
-const resolution = 3; // how many pixels high should each bitmap slice be? (the lower, the more detail)
+const resolution = 1; // how many pixels high should each bitmap slice be? (the lower, the more detail)
 const projectionHeight = 300; // half of vertical resolution
 
 // init the containers that will hold our instances
-let miniMap, sky, title, ball;
+let miniMap, sky, skyBlue, title, golfer, ball;
+
+// define starting position relative to the 'hole1' map (this normally differs between maps, but there is only one here)
+const holeOneStartX = 400;
+const holeOneStartY = 1400;
 
 // values that change are kept in a local state
 const state = {
@@ -24,6 +29,10 @@ const state = {
     musicPlaying: false, // whether music is playing
     loadingAsset: '', // the currently preloading asset
     offset: 0, // image offset within each slice
+    player: {
+        x: holeOneStartX,
+        y: holeOneStartY
+    },
     clickableContexts: []
 };
 
@@ -46,8 +55,16 @@ const images = [
         src: 'assets/sky.jpg'
     },
     {
+        id: 'sky_blue',
+        src: 'assets/sky_blue.png'
+    },
+    {
         id: 'title',
         src: 'assets/title.png'
+    },
+    {
+        id: 'golfer',
+        src: 'assets/golfer.png'
     }
 ];
 
@@ -120,7 +137,9 @@ function init() {
 	// construct class objects used throughout the various scenes
 	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0]);
 	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
+	skyBlue = new Sky(context, images.filter(img => img.id === 'sky_blue')[0]);
 	title = new Title(context, images.filter(img => img.id === 'title')[0]);
+	golfer = new Golfer(context, images.filter(img => img.id === 'golfer')[0]);
 
 	// register global event listeners
     window.addEventListener('click', clickHandler);
@@ -128,12 +147,14 @@ function init() {
 
 /**
  * Draw all instantiated bitmapSlices (this basically draws the 3d view)
+ *  * @param {number} offset - offset for the image in the slices (optional, will simulate animation)
  */
-function drawBitmapSlices() {
+function drawBitmapSlices(offset = 0) {
     bitmapSlices.forEach(bitmapSlice => {
         bitmapSlice.draw({
-            offset: state.offset,
-            resolution
+            offset,
+            resolution,
+            player: state.player
         });
 	})
 }
@@ -202,17 +223,23 @@ function update() {
             sky.draw(); // todo: this may be dropped from final version
             title.draw();
             context.globalAlpha = .25;
-            state.offset+=3;
-            drawBitmapSlices(); // todo: this may be dropped from final version
+            drawBitmapSlices(state.offset+=3); // todo: this may be dropped from final version
             context.globalAlpha = 1;
             helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180,  });
             helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
             helpers.Type.positionedText({ context, text: "START GAME", y: 380 });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'startGame',300,365,240, 40, () => { switchScene(Scenes.GAME) });
             helpers.Type.positionedText({ context, text: "OPTIONS", y: 440 });
             break;
         case Scenes.GAME:
+            skyBlue.draw();
             drawBitmapSlices();
-            miniMap.draw();
+            miniMap.draw(state.player);
+            golfer.draw();
+
+            // for now move the player on the miniMap so we can align the projection
+            state.player.y -= 2;
+            if (state.player.y < 0) { state.player.y = 1400 }
             break;
         default:
             break;
