@@ -16,4 +16,18 @@ export default class Canvas {
             clickableContexts.push({ id, x, y, width, height, action });
         }
     }
+
+    /**
+     * Adds rasterline effect overlay
+     */
+    static rasterLines(context) {
+
+        context.globalAlpha = .15;
+        for(let a = 1.5; a < 600; a+=3) {
+            context.fillStyle = "#000000";
+            context.fillRect(0, a, 800, 1.5);
+        }
+
+        context.globalAlpha = 1;
+    }
 }

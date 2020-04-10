@@ -3,12 +3,14 @@
 
 import helpers from './helpers/index.js';
 import Scenes from './constants/Scenes.js';
+
+import Ball from './components/Ball.js';
 import BitmapSlice from './components/BitmapSlice.js';
 import MiniMap from './components/MiniMap.js';
 import Sky from './components/Sky.js';
 import Title from './components/Title.js';
 import Golfer from './components/Golfer.js';
-import Ball from './components/Ball.js';
+import Pointer from './components/Pointer.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
@@ -17,11 +19,11 @@ const resolution = 1; // how many pixels high should each bitmap slice be? (the 
 const projectionHeight = 300; // half of vertical resolution
 
 // init the containers that will hold our instances
-let miniMap, sky, skyBlue, title, golfer, ball;
+let ball, miniMap, sky, skyBlue, title, golfer, pointer;
 
 // define starting position relative to the 'hole1' map (this normally differs between maps, but there is only one here)
 const holeOneStartX = 400;
-const holeOneStartY = 1400;
+const holeOneStartY = 550; //1400;
 
 // values that change are kept in a local state
 const state = {
@@ -55,6 +57,10 @@ const images = [
         src: 'assets/sky.jpg'
     },
     {
+        id: 'sky_gradient',
+        src: 'assets/sky_gradient.png'
+    },
+    {
         id: 'sky_blue',
         src: 'assets/sky_blue.png'
     },
@@ -65,6 +71,18 @@ const images = [
     {
         id: 'golfer',
         src: 'assets/golfer.png'
+    },
+    {
+        id: 'dropshadow',
+        src: 'assets/dropshadow.png'
+    },
+    {
+        id: 'pointer',
+        src: 'assets/pointer.png'
+    },
+    {
+        id: 'arrow',
+        src: 'assets/arrow.png'
     }
 ];
 
@@ -137,9 +155,10 @@ function init() {
 	// construct class objects used throughout the various scenes
 	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0]);
 	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
-	skyBlue = new Sky(context, images.filter(img => img.id === 'sky_blue')[0]);
+	skyBlue = new Sky(context, images.filter(img => img.id === 'sky_blue')[0], images.filter(img => img.id === 'sky_gradient')[0]);
 	title = new Title(context, images.filter(img => img.id === 'title')[0]);
-	golfer = new Golfer(context, images.filter(img => img.id === 'golfer')[0]);
+	golfer = new Golfer(context, images.filter(img => img.id === 'golfer')[0], images.filter(img => img.id === 'dropshadow')[0]);
+	pointer = new Pointer(context, images.filter(img => img.id === 'pointer')[0], images.filter(img => img.id === 'arrow')[0]);
 
 	// register global event listeners
     window.addEventListener('click', clickHandler);
@@ -225,7 +244,7 @@ function update() {
             context.globalAlpha = .25;
             drawBitmapSlices(state.offset+=3); // todo: this may be dropped from final version
             context.globalAlpha = 1;
-            helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180,  });
+            helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180 });
             helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
             helpers.Type.positionedText({ context, text: "START GAME", y: 380 });
             helpers.Canvas.clickableContext(state.clickableContexts, 'startGame',300,365,240, 40, () => { switchScene(Scenes.GAME) });
@@ -235,10 +254,18 @@ function update() {
             skyBlue.draw();
             drawBitmapSlices();
             miniMap.draw(state.player);
+            pointer.draw();
             golfer.draw();
+            helpers.Type.positionedText({ context, font: "18px Teko", text: "STROKE", color: "#aa0000", x: 15, y: 30 });
+            helpers.Type.positionedText({ context, font: "70px Teko", text: "12", color: "#ffffff", x: 15, y: 80 });
+
+            helpers.Type.positionedText({ context, font: "18px Teko", text: "PAR", color: "#aa0000", x: 755, y: 30 });
+            helpers.Type.positionedText({ context, font: "70px Teko", text: "4", color: "#ffffff", x: 745, y: 80 });
+
+            helpers.Canvas.rasterLines(context);
 
             // for now move the player on the miniMap so we can align the projection
-            state.player.y -= 2;
+            // state.player.y -= 1;
             if (state.player.y < 0) { state.player.y = 1400 }
             break;
         default:
