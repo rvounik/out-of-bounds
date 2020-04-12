@@ -1,5 +1,6 @@
 import helpers from './helpers/index.js';
 import Scenes from './constants/Scenes.js';
+import Skies from './constants/Skies.js';
 
 import Ball from './components/Ball.js';
 import BitmapSlice from './components/BitmapSlice.js';
@@ -17,13 +18,13 @@ const bitmapSlices = []; // will contain the bitmap slices that make up the imag
 const resolution = 1; // how many pixels high should each bitmap slice be? (the lower, the more detail)
 const projectionHeight = 300; // half of vertical resolution
 
-// init the containers that will hold our instances
-let ball, ballLie, miniMap, sky, skyBlue, title, golfer, pointer;
+// init the containers that will hold the instances
+let ball, surface, miniMap, sky, title, golfer, pointer;
 let collisionMaps = {};
 
 // define starting position relative to the 'hole1' map (this normally differs between maps, but there is only one here)
 const holeOneStartX = 400;
-const holeOneStartY = 550; //1400;
+const holeOneStartY = 550; // the bottom of the map is 1400;
 
 // values that change are kept in a local state
 const state = {
@@ -36,7 +37,9 @@ const state = {
         y: holeOneStartY,
         rotation: 0
     },
-    clickableContexts: []
+    clickableContexts: [],
+    mouseX : null,
+    mouseY: null
 };
 
 /**
@@ -140,7 +143,7 @@ sounds.map(sound => {
  * Checks to see if all assets are loaded
  * @returns {boolean} assetsLoaded
  */
-function assetsLoaded() {
+const assetsLoaded = () => {
     for (let loadedSound = 0; loadedSound < sounds.length; loadedSound ++) {
         if (!sounds[loadedSound].audio || !sounds[loadedSound].audio.duration) {
             state.loadingAsset = sounds[loadedSound].src;
@@ -157,14 +160,14 @@ function assetsLoaded() {
     }
 
     return true;
-}
+};
 
 /**
  * Initialises the engine
  */
-function init() {
+const init = () => {
 
-    // fill up bitmapSlices with BitmapSlice instances providing position, dimension, resolution, context, image Object
+    // fill up bitmapSlices with BitmapSlice instances providing position, dimension, resolution, context and Image
 	for (let y = 0; y <= (projectionHeight / resolution); y ++) {
 	    bitmapSlices.push(new BitmapSlice(
 	        y,
@@ -182,43 +185,50 @@ function init() {
 
 	// construct class objects used throughout the various scenes
 	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0], collisionMaps);
-	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
-	skyBlue = new Sky(context, images.filter(img => img.id === 'sky_blue')[0], images.filter(img => img.id === 'sky_gradient')[0]);
+	sky = new Sky(context, {
+        'blue': images.filter(img => img.id === 'sky_blue')[0],
+        'evening': images.filter(img => img.id === 'sky')[0],
+        'gradient': images.filter(img => img.id === 'sky_gradient')[0]
+    });
 	title = new Title(context, images.filter(img => img.id === 'title')[0]);
 	golfer = new Golfer(context, images.filter(img => img.id === 'golfer')[0], images.filter(img => img.id === 'dropshadow')[0]);
 	pointer = new Pointer(context, images.filter(img => img.id === 'pointer')[0], images.filter(img => img.id === 'arrow')[0]);
-	ballLie = new Surface(context, images.filter(img => img.id === 'ball_lie')[0]);
+	surface = new Surface(context, images.filter(img => img.id === 'ball_lie')[0]);
 
 
 	// register global event listeners
     window.addEventListener('click', clickHandler);
-}
+};
 
 /**
  * Draw all instantiated bitmapSlices (this basically draws the 3d view)
  *  * @param {number} offset - offset for the image in the slices (optional, will simulate animation)
  */
-function drawBitmapSlices(offset = 0) {
+const drawBitmapSlices = (offset = 0) => {
     bitmapSlices.forEach(bitmapSlice => {
         bitmapSlice.draw({
             offset,
             resolution,
-            player: state.player
+            player: state.player,
+            holeOneStartX,
+            holeOneStartY
         });
 	})
-}
+};
 
 /**
  * Checks if there is a context provided matching the clicked mouse coordinates, then executes its action
  */
-function clickHandler() {
+const clickHandler = () => {
     let mouseX = (event.clientX - document.getElementById("canvas").offsetLeft);
     let mouseY = (event.clientY - document.getElementById("canvas").offsetTop);
 
     if (mouseX < 0 || mouseX > 800 || mouseY < 0 || mouseY > 600) {
         return false;
     } else {
-        state.clickableContexts.map(clickableContext => {
+        state.mouseX = mouseX;
+        state.mouseY = mouseY;
+        state.clickableContexts.map((clickableContext) => {
             if (mouseX > clickableContext.x
                 && mouseX < clickableContext.x + clickableContext.width
                 && mouseY > clickableContext.y
@@ -226,7 +236,7 @@ function clickHandler() {
             ) { clickableContext.action() }
         });
     }
-}
+};
 
 /**
  * Ensure all assets are loaded (displaying which one is currently handled) before moving to the Title scene
@@ -242,22 +252,29 @@ function loader() {
     // switch scene and call init
     if (assetsLoaded() && state.scene !== Scenes.TITLE) {
         init();
-        switchScene(Scenes.GAME);
+        switchScene(Scenes.TITLE);
     }
 }
 
 /**
  * Clean up and switch state to the requested scene
  */
-function switchScene(scene) {
+const switchScene = scene => {
     state.clickableContexts = [];
     state.scene = scene;
-}
+};
+
+// todo: temp function with static values, just to simplify the current maths. REMOVE FROM FINAL
+const setPlayerPosition = () => {
+    const division = 5;
+    state.player.x = ((state.mouseX - 685) * division);
+    state.player.y = ((state.mouseY - 320) * division);
+};
 
 /**
  * Perform all timely actions required for the current scene
  */
-function update() {
+const update = () => {
     helpers.Canvas.clearCanvas(context, "#17411D");
 
     switch (state.scene) {
@@ -269,7 +286,7 @@ function update() {
                 state.musicPlaying = true;
                 helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
             }
-            sky.draw();
+            sky.draw(Skies.EVENING);
             title.draw();
             context.globalAlpha = .25;
             drawBitmapSlices(state.offset+=3);
@@ -281,14 +298,17 @@ function update() {
             helpers.Type.positionedText({ context, text: "OPTIONS", y: 440 });
             break;
         case Scenes.GAME:
-            skyBlue.draw();
+            sky.draw(Skies.BLUE);
             drawBitmapSlices();
             pointer.draw();
             golfer.draw();
 
             // these 2 method calls should only be done once after taking a shot
-            ballLie.draw(miniMap.checkCollisions(state.player));
+            surface.draw(miniMap.checkCollisions(state.player));
             miniMap.draw(state.player);
+
+            // debug: be able to click a point on the minimap to see its projection (without rotation for now)
+            helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerPosition',665,300,160, 300, () => { setPlayerPosition() });
 
             // todo: move to helper function
             helpers.Type.positionedText({ context, font: "18px Teko", text: "STROKE", color: "#aa0000", x: 15, y: 30 });
@@ -299,8 +319,8 @@ function update() {
             state.player.rotation += 1;
             if (state.player.rotation > 360) { state.player.rotation = 0 }
 
-            // for now move the player on the miniMap so we can align the projection
-            //state.player.y -= 2;
+            // for now move the player on the miniMap so we can align the projection todo: remove from final
+            // state.player.y -= 2;
             if (state.player.y < 0) { state.player.y = 1400 }
             break;
         default:
@@ -310,7 +330,7 @@ function update() {
     helpers.Canvas.rasterLines(context);
 
     requestAnimationFrame(() => { update(); });
-}
+};
 
 // init ball graphic outside of image creation loop so it can be used in the loader
 const ballImage = new Image();

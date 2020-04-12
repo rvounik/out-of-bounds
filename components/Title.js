@@ -25,7 +25,7 @@ export default class Title {
         }
 
         this.context.drawImage(
-            this.imageId['img'],
+            this.imageId.img,
             0 - (diff / 4), this.y, // image position
             800+(diff / 2), 200+(diff / 1.5) // image dimension
         );

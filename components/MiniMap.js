@@ -13,7 +13,7 @@ export default class MiniMap {
         this.miniMapProjectionStartY = 300;
 
         // now calculate how much smaller the miniMap is projected when compared to the original image (this keeps it dynamic)
-        this.division = this.imageId['img'].naturalWidth / this.miniMapProjectionWidth;
+        this.division = this.imageId.img.naturalWidth / this.miniMapProjectionWidth;
     }
 
     checkCollisions(player) {
@@ -58,7 +58,7 @@ export default class MiniMap {
         this.context.globalAlpha = .75;
 
         this.context.drawImage(
-            this.imageId['img'],
+            this.imageId.img,
             this.miniMapProjectionStartX, this.miniMapProjectionStartY,
             this.miniMapProjectionWidth, this.miniMapProjectionHeight
         );

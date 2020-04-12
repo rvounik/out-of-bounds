@@ -9,7 +9,7 @@ export default class Pointer {
         this.context.globalAlpha = .5;
 
         this.context.drawImage(
-            this.pointer['img'],
+            this.pointer.img,
             390, 346,
             21, 230
         );
@@ -18,7 +18,7 @@ export default class Pointer {
         this.context.translate(495, 520);
 
         this.context.drawImage(
-            this.arrow['img'],
+            this.arrow.img,
             0, 0,
             40, 40
         );
@@ -26,7 +26,7 @@ export default class Pointer {
         this.context.scale(-1, 1);
 
         this.context.drawImage(
-            this.arrow['img'],
+            this.arrow.img,
             200, 0,
             40, 40
         );

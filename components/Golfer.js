@@ -1,15 +1,15 @@
 export default class Golfer {
-    constructor(context, imageId, imageIdShadow) {
+    constructor(context, golfer, dropShadow) {
         this.context = context;
-        this.imageId = imageId;
-        this.imageIdShadow = imageIdShadow;
+        this.golfer = golfer;
+        this.dropShadow = dropShadow;
     }
 
     draw() {
         this.context.globalAlpha = .5;
 
         this.context.drawImage(
-            this.imageIdShadow['img'],
+            this.dropShadow.img,
             275, 555,
             133, 33
         );
@@ -17,7 +17,7 @@ export default class Golfer {
         this.context.globalAlpha = 1;
 
         this.context.drawImage(
-            this.imageId['img'],
+            this.golfer.img,
             305, 400,
             109, 180
         );

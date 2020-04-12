@@ -1,7 +1,7 @@
 export default class CollisionMap {
-    constructor(context, imageId) {
+    constructor(context, collisionMap) {
         this.context = context;
-        this.imageId = imageId;
+        this.collisionMap = collisionMap;
     }
 
     draw() {
@@ -13,7 +13,7 @@ export default class CollisionMap {
         const miniMapProjectionStartY = 300;
 
         this.context.drawImage(
-            this.imageId['img'],
+            this.collisionMap.img,
             miniMapProjectionStartX, miniMapProjectionStartY,
             miniMapProjectionWidth, miniMapProjectionHeight
         );

@@ -1,20 +1,26 @@
+import Skies from './../constants/Skies.js';
+
 export default class Sky {
-    constructor(context, sky, gradient = null) {
+    constructor(context, skies) {
         this.context = context;
-        this.sky = sky;
-        this.gradient = gradient;
+        this.skies = skies;
     }
 
-    draw() {
+    draw(skyType) {
+
+        // validate given skyType with constants
+        const sky = Object.keys(this.skies).filter(sky => sky === skyType);
+
         this.context.drawImage(
-            this.sky['img'],
+            this.skies[sky].img,
             0, 0,
             800, 300
         );
 
-        if (this.gradient) {
+        // draw gradient if required
+        if (skyType === Skies.BLUE) {
             this.context.drawImage(
-                this.gradient['img'],
+                this.skies[Skies.GRADIENT].img,
                 0, 300,
                 800, 20
             );

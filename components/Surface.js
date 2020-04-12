@@ -48,7 +48,7 @@ export default class Surface {
         context.fillRect(130, 20, 62, 62);
 
         context.drawImage(
-            this.imageId['img'],
+            this.imageId.img,
             imageOffset, 0,
             100, 100,
             132, 22,
