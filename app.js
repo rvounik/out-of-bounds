@@ -1,6 +1,3 @@
-// this allows access to context from imported modules, but its not exactly best practice. unsure if this should be used
-// window.context = document.getElementById('canvas').getContext('2d');
-
 import helpers from './helpers/index.js';
 import Scenes from './constants/Scenes.js';
 
@@ -11,6 +8,8 @@ import Sky from './components/Sky.js';
 import Title from './components/Title.js';
 import Golfer from './components/Golfer.js';
 import Pointer from './components/Pointer.js';
+import Surface from './components/Surface.js';
+import CollisionMap from './components/CollisionMap.js';
 
 // set some globals and configuration parameters
 const context = document.getElementById('canvas').getContext('2d');
@@ -19,7 +18,8 @@ const resolution = 1; // how many pixels high should each bitmap slice be? (the 
 const projectionHeight = 300; // half of vertical resolution
 
 // init the containers that will hold our instances
-let ball, miniMap, sky, skyBlue, title, golfer, pointer;
+let ball, ballLie, miniMap, sky, skyBlue, title, golfer, pointer;
+let collisionMaps = {};
 
 // define starting position relative to the 'hole1' map (this normally differs between maps, but there is only one here)
 const holeOneStartX = 400;
@@ -33,13 +33,14 @@ const state = {
     offset: 0, // image offset within each slice
     player: {
         x: holeOneStartX,
-        y: holeOneStartY
+        y: holeOneStartY,
+        rotation: 0
     },
     clickableContexts: []
 };
 
 /**
- * Holds all images used in the app
+ * Holds all images used in the game
  * @param {string} id - id to refer to the image
  * @param {string} src - path to the image
  */
@@ -47,6 +48,10 @@ const images = [
     {
         id: 'ball',
         src: 'assets/ball.png'
+    },
+    {
+        id: 'ball_lie',
+        src: 'assets/ball_lie.png'
     },
     {
         id: 'hole1',
@@ -83,6 +88,22 @@ const images = [
     {
         id: 'arrow',
         src: 'assets/arrow.png'
+    },
+    {
+        id: 'collision_map_mid_rough',
+        src: 'assets/collision_map_mid_rough.png'
+    },
+    {
+        id: 'collision_map_rough',
+        src: 'assets/collision_map_rough.png'
+    },
+    {
+        id: 'collision_map_sand',
+        src: 'assets/collision_map_sand.png'
+    },
+    {
+        id: 'collision_map_out',
+        src: 'assets/collision_map_out.png'
     }
 ];
 
@@ -152,13 +173,22 @@ function init() {
 	    );
 	}
 
+    collisionMaps = {
+        MID: new CollisionMap(context, images.filter(img => img.id === 'collision_map_mid_rough')[0]),
+        ROUGH: new CollisionMap(context, images.filter(img => img.id === 'collision_map_rough')[0]),
+        SAND: new CollisionMap(context, images.filter(img => img.id === 'collision_map_sand')[0]),
+        OUT: new CollisionMap(context, images.filter(img => img.id === 'collision_map_out')[0])
+    };
+
 	// construct class objects used throughout the various scenes
-	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0]);
+	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0], collisionMaps);
 	sky = new Sky(context, images.filter(img => img.id === 'sky')[0]);
 	skyBlue = new Sky(context, images.filter(img => img.id === 'sky_blue')[0], images.filter(img => img.id === 'sky_gradient')[0]);
 	title = new Title(context, images.filter(img => img.id === 'title')[0]);
 	golfer = new Golfer(context, images.filter(img => img.id === 'golfer')[0], images.filter(img => img.id === 'dropshadow')[0]);
 	pointer = new Pointer(context, images.filter(img => img.id === 'pointer')[0], images.filter(img => img.id === 'arrow')[0]);
+	ballLie = new Surface(context, images.filter(img => img.id === 'ball_lie')[0]);
+
 
 	// register global event listeners
     window.addEventListener('click', clickHandler);
@@ -212,7 +242,7 @@ function loader() {
     // switch scene and call init
     if (assetsLoaded() && state.scene !== Scenes.TITLE) {
         init();
-        switchScene(Scenes.TITLE);
+        switchScene(Scenes.GAME);
     }
 }
 
@@ -239,10 +269,10 @@ function update() {
                 state.musicPlaying = true;
                 helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
             }
-            sky.draw(); // todo: this may be dropped from final version
+            sky.draw();
             title.draw();
             context.globalAlpha = .25;
-            drawBitmapSlices(state.offset+=3); // todo: this may be dropped from final version
+            drawBitmapSlices(state.offset+=3);
             context.globalAlpha = 1;
             helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180 });
             helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
@@ -253,24 +283,31 @@ function update() {
         case Scenes.GAME:
             skyBlue.draw();
             drawBitmapSlices();
-            miniMap.draw(state.player);
             pointer.draw();
             golfer.draw();
+
+            // these 2 method calls should only be done once after taking a shot
+            ballLie.draw(miniMap.checkCollisions(state.player));
+            miniMap.draw(state.player);
+
+            // todo: move to helper function
             helpers.Type.positionedText({ context, font: "18px Teko", text: "STROKE", color: "#aa0000", x: 15, y: 30 });
             helpers.Type.positionedText({ context, font: "70px Teko", text: "12", color: "#ffffff", x: 15, y: 80 });
-
             helpers.Type.positionedText({ context, font: "18px Teko", text: "PAR", color: "#aa0000", x: 755, y: 30 });
             helpers.Type.positionedText({ context, font: "70px Teko", text: "4", color: "#ffffff", x: 745, y: 80 });
 
-            helpers.Canvas.rasterLines(context);
+            state.player.rotation += 1;
+            if (state.player.rotation > 360) { state.player.rotation = 0 }
 
             // for now move the player on the miniMap so we can align the projection
-            // state.player.y -= 1;
+            //state.player.y -= 2;
             if (state.player.y < 0) { state.player.y = 1400 }
             break;
         default:
             break;
     }
+
+    helpers.Canvas.rasterLines(context);
 
     requestAnimationFrame(() => { update(); });
 }

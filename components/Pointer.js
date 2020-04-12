@@ -15,7 +15,7 @@ export default class Pointer {
         );
 
         this.context.save();
-        this.context.translate(495, 520)
+        this.context.translate(495, 520);
 
         this.context.drawImage(
             this.arrow['img'],
