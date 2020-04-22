@@ -1,7 +1,12 @@
+
+// helpers
 import helpers from './helpers/index.js';
+
+// constants
 import Scenes from './constants/Scenes.js';
 import Skies from './constants/Skies.js';
 
+// components
 import Ball from './components/Ball.js';
 import BitmapSlice from './components/BitmapSlice.js';
 import MiniMap from './components/MiniMap.js';
@@ -12,13 +17,13 @@ import Pointer from './components/Pointer.js';
 import Surface from './components/Surface.js';
 import CollisionMap from './components/CollisionMap.js';
 
-// set some globals and configuration parameters
+// globals
 const context = document.getElementById('canvas').getContext('2d');
 const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
 const resolution = 1; // how many pixels high should each bitmap slice be? (the lower, the more detail)
 const projectionHeight = 300; // half of vertical resolution
 
-// init the containers that will hold the instances
+// init containers that hold the instances
 let ball, surface, miniMap, sky, title, golfer, pointer;
 let collisionMaps = {};
 
@@ -26,7 +31,7 @@ let collisionMaps = {};
 const holeOneStartX = 400;
 const holeOneStartY = 550; // the bottom of the map is 1400;
 
-// values that change are kept in a local state
+// dynamic values are kept in local state
 const state = {
     scene: Scenes.LOADING, // which scene is currently active
     musicPlaying: false, // whether music is playing
@@ -37,7 +42,7 @@ const state = {
         y: holeOneStartY,
         rotation: 0
     },
-    clickableContexts: [],
+    clickableContexts: [], // keeps track of clickable context areas
     mouseX : null,
     mouseY: null
 };
@@ -111,7 +116,7 @@ const images = [
 ];
 
 /**
- * Attaches Image object to each image and sets its source
+ * Attach Image object to each image and load its source
  */
 images.map(image => {
     image.img = new Image();
@@ -119,9 +124,9 @@ images.map(image => {
 });
 
 /**
- * Holds all sounds used in the app
- * @param {string} id - id to refer to the image
- * @param {string} src - path to the image
+ * Holds all sounds used in the game
+ * @param {string} id - id to refer to the sound asset
+ * @param {string} src - path to the sound asset
  */
 const sounds = [
     {
@@ -131,16 +136,16 @@ const sounds = [
 ];
 
 /**
- * Attaches Audio object to each sound and sets its source
+ * Attach Audio object to each sound and load its source
  */
 sounds.map(sound => {
     sound.audio = new Audio();
-    sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices
+    sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices todo: needs a fix for first load
     sound.audio.src = sound.src;
 });
 
 /**
- * Checks to see if all assets are loaded
+ * Check to see if all assets are loaded
  * @returns {boolean} assetsLoaded
  */
 const assetsLoaded = () => {
@@ -151,7 +156,7 @@ const assetsLoaded = () => {
         }
     }
 
-    // since sounds are often partially loaded depending on browser, check for images last
+    // since sounds are often partially loaded depending on browser, check for images last to give it more time to load
     for (let loadedBitmap = 0; loadedBitmap < images.length; loadedBitmap ++) {
         if (!images[loadedBitmap] || images[loadedBitmap].img.naturalWidth <= 0) {
             state.loadingAsset = images[loadedBitmap].src;
@@ -163,7 +168,7 @@ const assetsLoaded = () => {
 };
 
 /**
- * Initialises the engine
+ * Initialise the engine
  */
 const init = () => {
 
@@ -176,6 +181,7 @@ const init = () => {
 	    );
 	}
 
+	// these are used to do collision checks to see on what type of surface the ball lies
     collisionMaps = {
         MID: new CollisionMap(context, images.filter(img => img.id === 'collision_map_mid_rough')[0]),
         ROUGH: new CollisionMap(context, images.filter(img => img.id === 'collision_map_rough')[0]),
@@ -217,7 +223,7 @@ const drawBitmapSlices = (offset = 0) => {
 };
 
 /**
- * Checks if there is a context provided matching the clicked mouse coordinates, then executes its action
+ * Check if there is a context provided matching the clicked mouse coordinates, then execute its action
  */
 const clickHandler = () => {
     let mouseX = (event.clientX - document.getElementById("canvas").offsetLeft);
@@ -246,7 +252,7 @@ function loader() {
     helpers.Type.positionedText({ context, text: "LOADING", y: 250 });
     helpers.Type.positionedText({ context, text: state.loadingAsset, y: 280, font: "12px Arial" });
 
-    // show bouncing ball animation if available
+    // show bouncing ball animation when available
     if (ball) { ball.draw() }
 
     // switch scene and call init
@@ -260,6 +266,7 @@ function loader() {
  * Clean up and switch state to the requested scene
  */
 const switchScene = scene => {
+    // todo: stop all sounds
     state.clickableContexts = [];
     state.scene = scene;
 };
