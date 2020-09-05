@@ -1,53 +1,73 @@
 export default class BitmapSlice {
-	constructor(y, context, imageId) {
-		this.y = y;
+	constructor(context, imageId) {
 		this.context = context;
 		this.imageId = imageId;
 	}
 
     /**
-     * Renders a slice of the projection
-     * @param {object} cfg - the configuration object
-     * @param {object} cfg.offset - the offset of the projection, used on the title screen
-     * @param {object} cfg.resolution - the resolution used in the game, determines the height of each slice in pixels
-     * @param {object} cfg.player - the player object containing location and dimensions
-     * @param {object} cfg.player.x - the x value of the player
-     * @param {object} cfg.player.y - the y value of the player
-     * @param {object} cfg.player.rotation - the rotation of the player
+     * Renders a slice of the pseudo-3d projection
+     * @param {Object} cfg - the configuration object
+     * @param {number} cfg.startScale - initial value of the scale, this affects how far away the view appears
+     * @param {number} cfg.scaleAmplitude - the amplitude of the scale, as determined by index
+     * @param {Object} cfg.dimensions - the dimensions object
+     * @param {number} cfg.dimensions.startX - start x (usually zero)
+     * @param {number} cfg.dimensions.endX - start x (usually the full width is used)
+     * @param {number} cfg.dimensions.startY - start y (it starts halfway)
+     * @param {number} cfg.dimensions.endY - end y (usually bottom of the screen)
+     * @param {number} cfg.pixelsPerSlice - height of each slice in pixels. the lower ths number, the more defined the view is rendered
+     * @param {Object} cfg.pivotPoint - the coordinates of the rotation point. this is canvas-based so usually the bottom middle of the screen,
+     * @param {number} cfg.pivotPoint.x - the coordinates of the rotation point. this is canvas-based so usually the bottom middle of the screen,
+     * @param {number} cfg.pivotPoint.y - the coordinates of the rotation point. this is canvas-based so usually the bottom middle of the screen,
+     * @param {Object} player - the player object
+     * @param {number} player.x - the x position of the player
+     * @param {number} player.y - the y position of the player
+     * @param {number} player.angle - the rotation of the player
+     * @param {number} index - the index
      */
-	draw(cfg) {
-        const fieldOfVision = 7500 / cfg.resolution; // the higher this number, the less the 'banding' effect at the bottom of the screen, but the 'higher' the camera appears
-        const narrowness = 2.5 / (cfg.resolution / 1.2); // this determines how narrow the view is. if set wider, the distancing effect becomes affected, so it needs balancing
-        const projectionWidth = 800;
-        const projectionHeight = 600;
-
+    draw(cfg, player, index) {
         const context = this.context;
 
-	    if (cfg.offset) {
+        const { startScale, scaleAmplitude, pixelsPerSlice, pivotPoint } = cfg;
+        const { startX, endX, startY, endY } = cfg.dimensions;
 
-	        // this is just for the title screen
-            context.drawImage(
-                this.imageId['img'],
-                0, -400 + (fieldOfVision * (cfg.resolution / this.y)) - (0 - (cfg.offset / .75) % 2000),
-                projectionWidth, cfg.resolution,
-                cfg.player.x - ((this.y * (cfg.resolution * 5)) * narrowness), (((projectionHeight / 2) / cfg.resolution) * cfg.resolution) + (this.y * cfg.resolution),
-                ((this.y * 10) * narrowness) * cfg.resolution, cfg.resolution
-            );
-        } else {
-	        context.save();
+        context.save();
 
-            context.translate(cfg.player.x - ((this.y * 5) * narrowness), (((projectionHeight / 2) / cfg.resolution) * cfg.resolution) + (this.y * cfg.resolution))
+        // define path to be used as the clipping mask
+        context.beginPath();
+        context.translate(startX, startY + (index * pixelsPerSlice)); // the clipping rectangle needs to keep moving 'down', so index is utilised here
+        context.lineTo(endX, 0);
+        context.lineTo(endX, pixelsPerSlice);
+        context.lineTo(startX, pixelsPerSlice);
+        context.lineTo(startX, 0);
+        context.clip();
 
-            context.drawImage(
-                this.imageId['img'],
-                0, 0 - (fieldOfVision * (cfg.resolution / this.y)) - (-100 - (cfg.player.y / .75) % 2000),
-                projectionWidth, cfg.resolution,
-                0,0,
-                ((this.y * 10) * narrowness) * cfg.resolution, cfg.resolution
-            );
+        // reset translation used to draw clipping mask: the image rendered 'inside' should not be affected by it
+        context.translate(-0, -pixelsPerSlice);
 
-            context.restore();
+        context.translate(pivotPoint.x, pivotPoint.y - index); // by subtracting the index, the rotation point is visually fixed on screen
 
-        }
+        // scale the canvas: the 'lower' the clip is positioned, the more it should zoom in to simulate depth (with scaleAmplitude to enhance the effect)
+        // old: startScale + (scaleAmplitude * (index * player.height)),
+        context.scale(
+            startScale + (scaleAmplitude * index),
+            startScale + (scaleAmplitude * index)
+        );
+
+        // rotate canvas to match player angle
+        context.rotate(player.angle * Math.PI / 180);
+
+        // move canvas to match player x, y
+        context.translate(player.x, player.y);
+
+        // reset center point translation (note that it retains the offset applied when setting the center point. this way the image is visually moved inside)
+        context.translate(-pivotPoint.x, -pivotPoint.y);
+
+        // note that not much is used of the drawing API since the canvas is manipulated instead
+        context.drawImage(
+            this.imageId['img'],
+            0, 0
+        );
+
+        context.restore();
     }
 }

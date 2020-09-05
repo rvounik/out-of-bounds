@@ -1,4 +1,4 @@
-export default class Pointer {
+export default class Pointers {
     constructor(context, pointer, arrow) {
         this.context = context;
         this.arrow = arrow;
@@ -8,15 +8,18 @@ export default class Pointer {
     draw() {
         this.context.globalAlpha = .5;
 
+        // middle
         this.context.drawImage(
             this.pointer.img,
-            390, 346,
+            417, 318,
             21, 230
         );
 
         this.context.save();
-        this.context.translate(495, 520);
 
+        this.context.translate(600, 520);
+
+        // left
         this.context.drawImage(
             this.arrow.img,
             0, 0,
@@ -25,9 +28,10 @@ export default class Pointer {
 
         this.context.scale(-1, 1);
 
+        // right
         this.context.drawImage(
             this.arrow.img,
-            200, 0,
+            400, 0,
             40, 40
         );
 

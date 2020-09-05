@@ -2,8 +2,8 @@ export default class Type {
 
     /**
      * Renders the provided text at given coordinates. When x value is not provided it will center the text automatically
-     * @param {object} cfg - the configuration object
-     * @param {object} cfg.context - the context object
+     * @param {Object} cfg - the configuration object
+     * @param {Object} cfg.context - the context object
      * @param {string} [cfg.font = "30px Arial"] - the requested text font (optional)
      * @param {string} [cfg.color = "#ffffff"] - the requested text color (optional)
      * @param {string} cfg.text - the text to render

@@ -6,7 +6,7 @@ export default class CollisionMap {
 
     draw() {
 
-        // set some constants for the dimensions and position of the collision map (these should be drawn at the same spot as the miniMap)
+        // set some constants for the dimensions and position of the collision map (these should be drawn at the same spot as the miniMap so should probably come in from app.js)
         const miniMapProjectionWidth = 160;
         const miniMapProjectionHeight = 300;
         const miniMapProjectionStartX = 665;

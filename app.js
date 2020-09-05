@@ -1,4 +1,3 @@
-
 // helpers
 import helpers from './helpers/index.js';
 
@@ -13,38 +12,59 @@ import MiniMap from './components/MiniMap.js';
 import Sky from './components/Sky.js';
 import Title from './components/Title.js';
 import Golfer from './components/Golfer.js';
-import Pointer from './components/Pointer.js';
+import Pointers from './components/Pointers.js';
 import Surface from './components/Surface.js';
 import CollisionMap from './components/CollisionMap.js';
+import Statistics from './components/Statistics.js';
 
 // globals
 const context = document.getElementById('canvas').getContext('2d');
-const bitmapSlices = []; // will contain the bitmap slices that make up the image projection
-const resolution = 1; // how many pixels high should each bitmap slice be? (the lower, the more detail)
-const projectionHeight = 300; // half of vertical resolution
 
 // init containers that hold the instances
-let ball, surface, miniMap, sky, title, golfer, pointer;
+let ball, surface, miniMap, sky, title, golfer, pointers, statistics;
 let collisionMaps = {};
 
-// define starting position relative to the 'hole1' map (this normally differs between maps, but there is only one here)
-const holeOneStartX = 400;
-const holeOneStartY = 550; // the bottom of the map is 1400;
+// init timers
+let swingTimer;
+
+// init specific vars that dont really belong to the runtime state
+let titleStartGameFontSize = 30;
+let titleOptionsFontSize = 30;
 
 // dynamic values are kept in local state
 const state = {
     scene: Scenes.LOADING, // which scene is currently active
     musicPlaying: false, // whether music is playing
     loadingAsset: '', // the currently preloading asset
-    offset: 0, // image offset within each slice
+    startScale: .5, // determines the height of the projection, the lower, the closer to the ground
+    scaleAmplitude: .025, // the higher, the more zoomed-out the view appears
+    pixelsPerSlice: 1, // determines the resolution of the projection. the lower, the better
     player: {
-        x: holeOneStartX,
-        y: holeOneStartY,
-        rotation: 0
+        x: 0,
+        y: 0,
+        angle: 0,
+        swing: 0
+    },
+    statistics: {
+        stroke: 12,
+        par: 5
     },
     clickableContexts: [], // keeps track of clickable context areas
     mouseX : null,
-    mouseY: null
+    mouseY: null,
+    projection: {
+        width: 800,
+        height: 600
+    },
+    miniMap: {
+        x: 665,
+        y: 300,
+        w: 135,
+        h: 300
+    },
+    mouseDown: false,
+    mouseDownAction: null,
+    showRasterLines: true
 };
 
 /**
@@ -75,15 +95,11 @@ const images = [
     },
     {
         id: 'sky_blue',
-        src: 'assets/sky_blue.png'
+        src: 'assets/sky_blue_wide.png'
     },
     {
         id: 'title',
         src: 'assets/title.png'
-    },
-    {
-        id: 'golfer',
-        src: 'assets/golfer.png'
     },
     {
         id: 'dropshadow',
@@ -112,6 +128,10 @@ const images = [
     {
         id: 'collision_map_out',
         src: 'assets/collision_map_out.png'
+    },
+    {
+        id: 'spritesheet_golfer',
+        src: 'assets/spritesheet_golfer.png'
     }
 ];
 
@@ -131,7 +151,7 @@ images.map(image => {
 const sounds = [
     {
         id: 'title_music',
-        src: 'assets/golf_short.wav'
+        src: 'assets/golf.mp3'
     }
 ];
 
@@ -140,7 +160,7 @@ const sounds = [
  */
 sounds.map(sound => {
     sound.audio = new Audio();
-    sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices todo: needs a fix for first load
+    sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices
     sound.audio.src = sound.src;
 });
 
@@ -172,15 +192,6 @@ const assetsLoaded = () => {
  */
 const init = () => {
 
-    // fill up bitmapSlices with BitmapSlice instances providing position, dimension, resolution, context and Image
-	for (let y = 0; y <= (projectionHeight / resolution); y ++) {
-	    bitmapSlices.push(new BitmapSlice(
-	        y,
-	    	context,
-	    	images.filter(img => img.id === 'hole1')[0])
-	    );
-	}
-
 	// these are used to do collision checks to see on what type of surface the ball lies
     collisionMaps = {
         MID: new CollisionMap(context, images.filter(img => img.id === 'collision_map_mid_rough')[0]),
@@ -191,41 +202,62 @@ const init = () => {
 
 	// construct class objects used throughout the various scenes
 	miniMap = new MiniMap(context, images.filter(img => img.id === 'hole1')[0], collisionMaps);
-	sky = new Sky(context, {
+	title = new Title(context, images.filter(img => img.id === 'title')[0]);
+	golfer = new Golfer(context, images.filter(img => img.id === 'spritesheet_golfer')[0], images.filter(img => img.id === 'dropshadow')[0]);
+	pointers = new Pointers(context, images.filter(img => img.id === 'pointer')[0], images.filter(img => img.id === 'arrow')[0]);
+	surface = new Surface(context, images.filter(img => img.id === 'ball_lie')[0]);
+	statistics = new Statistics(context, state.statistics);
+    sky = new Sky(context, {
         'blue': images.filter(img => img.id === 'sky_blue')[0],
         'evening': images.filter(img => img.id === 'sky')[0],
         'gradient': images.filter(img => img.id === 'sky_gradient')[0]
     });
-	title = new Title(context, images.filter(img => img.id === 'title')[0]);
-	golfer = new Golfer(context, images.filter(img => img.id === 'golfer')[0], images.filter(img => img.id === 'dropshadow')[0]);
-	pointer = new Pointer(context, images.filter(img => img.id === 'pointer')[0], images.filter(img => img.id === 'arrow')[0]);
-	surface = new Surface(context, images.filter(img => img.id === 'ball_lie')[0]);
-
 
 	// register global event listeners
-    window.addEventListener('click', clickHandler);
+    window.addEventListener('mousedown', event => mouseDownHandler(event) );
+    window.addEventListener('mouseup', event => mouseUpHandler(event) );
 };
 
 /**
- * Draw all instantiated bitmapSlices (this basically draws the 3d view)
- *  * @param {number} offset - offset for the image in the slices (optional, will simulate animation)
+ * Draw all instantiated bitmapSlices (this renders the pseudo-3d view)
  */
-const drawBitmapSlices = (offset = 0) => {
-    bitmapSlices.forEach(bitmapSlice => {
-        bitmapSlice.draw({
-            offset,
-            resolution,
-            player: state.player,
-            holeOneStartX,
-            holeOneStartY
-        });
-	})
+const drawBitmapSlices = () => {
+
+    const cfg = {
+        startScale: state.startScale,
+        scaleAmplitude: state.scaleAmplitude,
+        dimensions: {
+            startX: 0,
+            endX: state.projection.width,
+            startY: state.projection.height / 2,
+            endY: state.projection.height,
+        },
+        pixelsPerSlice: state.pixelsPerSlice,
+        pivotPoint: { x: state.projection.width / 2, y: state.projection.height / 2 }
+    };
+
+    const sliceCount = (cfg.dimensions.endY - cfg.dimensions.startY) / cfg.pixelsPerSlice;
+
+    for (let index = 0; index < sliceCount; index++ ) {
+        let slice = new BitmapSlice(
+            context,
+            images.filter(img => img.id === 'hole1')[0] // todo: should be set by state: holes: [ 1: { image: 'path' } ]
+        );
+
+        slice.draw(
+            cfg,
+            state.player,
+            index
+        );
+    }
 };
 
 /**
- * Check if there is a context provided matching the clicked mouse coordinates, then execute its action
+ * Check if there is a context provided matching the clicked mouse coordinates, then execute its associated action
  */
-const clickHandler = () => {
+const mouseDownHandler = event => {
+    state.mouseDown = true;
+
     let mouseX = (event.clientX - document.getElementById("canvas").offsetLeft);
     let mouseY = (event.clientY - document.getElementById("canvas").offsetTop);
 
@@ -234,112 +266,322 @@ const clickHandler = () => {
     } else {
         state.mouseX = mouseX;
         state.mouseY = mouseY;
-        state.clickableContexts.map((clickableContext) => {
+        state.clickableContexts.map(clickableContext => {
             if (mouseX > clickableContext.x
                 && mouseX < clickableContext.x + clickableContext.width
                 && mouseY > clickableContext.y
                 && mouseY < clickableContext.y + clickableContext.height
-            ) { clickableContext.action() }
+            ) {
+
+                // store action in state so it runs as long as mouseup event is not triggered
+                if (clickableContext.repeat) {
+                    state.mouseDownAction = () => { clickableContext.action(); };
+                }
+
+                clickableContext.action();
+            }
         });
     }
 };
 
 /**
+ * Cancels the mousedown and removes the stored action
+ */
+const mouseUpHandler = () => {
+    state.mouseDown = false;
+    state.mouseDownAction = null;
+};
+
+/**
  * Ensure all assets are loaded (displaying which one is currently handled) before moving to the Title scene
  */
-function loader() {
+const loader = () => {
     helpers.Canvas.clearCanvas(context);
     helpers.Type.positionedText({ context, text: "LOADING", y: 250 });
     helpers.Type.positionedText({ context, text: state.loadingAsset, y: 280, font: "12px Arial" });
 
     // show bouncing ball animation when available
-    if (ball) { ball.draw() }
+    if (ball) {
+        ball.draw();
+    }
 
     // switch scene and call init
     if (assetsLoaded() && state.scene !== Scenes.TITLE) {
         init();
         switchScene(Scenes.TITLE);
     }
-}
+};
 
 /**
- * Clean up and switch state to the requested scene
+ * Clean up and switch state to the requested scene, add listeners and start audio if required
  */
 const switchScene = scene => {
-    // todo: stop all sounds
+
+    // remove all clickable context
     state.clickableContexts = [];
+
+    switch (scene) {
+        case Scenes.TITLE:
+
+            if (!state.musicPlaying) {
+                helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
+                state.musicPlaying = true;
+            }
+
+            // set global amplitude to determine the rendering of the projection
+            state.scaleAmplitude = .025;
+
+            // place player in the right position
+            state.player.y = -1750;
+
+            window.addEventListener('mousemove', titleScreenHoverHandler, true);
+
+            helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'startGame', 270, 340, 240, 50, () => { switchScene(Scenes.GAME); });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'options', 270, 410, 240, 50, () => { switchScene(Scenes.OPTIONS); });
+
+            // from now one escape will return to the menu
+            document.onkeydown = event => {
+                if (event.keyCode === 27) {
+                    switchScene(Scenes.TITLE);
+                }
+            };
+
+            break;
+
+        case Scenes.OPTIONS:
+
+            helpers.Canvas.clickableContext(state.clickableContexts, 'showRasterLines', 270, 40, 240, 50, () => { state.showRasterLines = !state.showRasterLines });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'backToTitle', 20, 540, 240, 50, () => { switchScene(Scenes.TITLE) });
+
+            break;
+
+        case Scenes.GAME:
+
+            // kill all audio
+            if (state.musicPlaying) {
+                state.musicPlaying = false;
+                helpers.Sound.stopSound(sounds.filter(soundObj => soundObj.id === 'title_music'));
+            }
+
+            window.removeEventListener('mousemove', titleScreenHoverHandler, true);
+
+            // set global amplitude to determine the rendering of the projection
+            state.scaleAmplitude = 0.1;
+
+            // place player in the right position
+            state.player.y = -600;
+
+            // just to debug you can click anywhere on the miniMap to position the player at that point
+            helpers.Canvas.clickableContext(
+                state.clickableContexts,
+                'setPlayerPosition',
+                state.miniMap.x,
+                state.miniMap.y,
+                state.miniMap.w,
+                state.miniMap.h,
+                () => { convertMiniMapCoordinatesToBitmapCoordinates() }
+            );
+
+            // assign rotate action to the left arrow
+            helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerRotationLeft',160,520,50, 50, () => {
+                normalisePlayerOrientation({
+                    ...state.player,
+                    angle: -2
+                });
+            }, true);
+
+            // assign rotate action to the right arrow
+            helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerRotationRight',605,520,50, 50, () => {
+                normalisePlayerOrientation({
+                    ...state.player,
+                    angle: +2
+                });
+            }, true);
+
+            helpers.Canvas.clickableContext(state.clickableContexts, 'swing',300,380,140, 220, () => {
+
+                // if it was not playing already, start the interval timeout for the swing animation
+                if (state.player.swing === 0) {
+                    swingTimer = setInterval(incrementSwingTimer, 225);
+                }
+            });
+
+            break;
+
+        default:
+            break;
+
+    }
+
+    // switch the scene
     state.scene = scene;
 };
 
-// todo: temp function with static values, just to simplify the current maths. REMOVE FROM FINAL
-const setPlayerPosition = () => {
-    const division = 5;
-    state.player.x = ((state.mouseX - 685) * division);
-    state.player.y = ((state.mouseY - 320) * division);
+/**
+ * Convert coordinates from the miniMap to coordinates matching the bitmap (currently a static bitmap is used)
+ */
+const convertMiniMapCoordinatesToBitmapCoordinates = () => {
+    const imageId = images.filter(img => img.id === 'hole1')[0]; // todo: should be set by state: holes: [ 1: { image: 'path' } ]
+    const divisionW = imageId.img.width / state.miniMap.w;
+    const divisionH = imageId.img.height / state.miniMap.h;
+
+    state.player.x = normalizePlayerX(0 - ((state.mouseX - state.miniMap.x) * divisionW));
+    state.player.y = normalizePlayerY(0 - ((state.mouseY - state.miniMap.y) * divisionH));
+};
+
+/**
+ * Convert bitmap x coordinates (eg. 0-800) to coordinates that can be used by the renderer
+ * @returns {number} x
+ */
+const normalizePlayerX = (x) => {
+
+    // add half the projection width, because the image is centered
+    return x + (state.projection.width / 2);
+};
+
+/**
+ * Convert bitmap y coordinates (eg. 0-2080) to coordinates that can be used by the renderer
+ * @returns {number} y
+ */
+const normalizePlayerY = (y) => {
+
+    // add half the projection height, because the projection starts halfway down the screen
+    return y + (state.projection.height / 2);
+};
+
+/**
+ * Convert player rotation to the right angle that can be used by the renderer
+ * @returns {number} angle
+ */
+const normalisePlayerOrientation = orientation => {
+
+    // revert the rotation since the bitmap is inverted
+    state.player.angle += 0 - orientation.angle;
+};
+
+/**
+ * Deals with showing the right frame of the sprite sheet, clearing the interval if it reaches the end
+ */
+const incrementSwingTimer = () => {
+    state.player.swing ++;
+
+    // number of frames in sprite sheet (skips the last frame, it looks wrong and is not needed in the final game anyway)
+    if (state.player.swing > 11) {
+        state.player.swing = 0;
+        clearInterval(swingTimer);
+    }
+};
+
+/**
+ * Check if mouse hovers over a certain option on the title screen, then slightly increments the font size of it
+ */
+const titleScreenHoverHandler = event => {
+    event.preventDefault();
+
+    let mouseX = (event.clientX - document.getElementById("canvas").offsetLeft);
+    let mouseY = (event.clientY - document.getElementById("canvas").offsetTop);
+
+    // start game
+    if (mouseX > 270 && mouseX < 510 && mouseY > 340 && mouseY < 390) {
+        titleStartGameFontSize+= titleStartGameFontSize < 40 ? 1 : 0;
+    } else {
+        titleStartGameFontSize-= titleStartGameFontSize > 30 ? 1 : 0;
+    }
+
+    // options
+    if (mouseX > 270 && mouseX < 510 && mouseY > 390 && mouseY < 440) {
+        titleOptionsFontSize+= titleOptionsFontSize < 40 ? 1 : 0;
+    } else {
+        titleOptionsFontSize-= titleOptionsFontSize > 30 ? 1 : 0;
+    }
 };
 
 /**
  * Perform all timely actions required for the current scene
  */
 const update = () => {
-    helpers.Canvas.clearCanvas(context, "#17411D");
+    helpers.Canvas.clearCanvas(context, '#17411D');
 
     switch (state.scene) {
         case Scenes.LOADING:
             loader();
             break;
+
         case Scenes.TITLE:
-            if (!state.musicPlaying) {
-                state.musicPlaying = true;
-                helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
-            }
-            sky.draw(Skies.EVENING);
+            sky.draw(Skies.EVENING, state, false, false);
             title.draw();
+
+            // projection
             context.globalAlpha = .25;
-            drawBitmapSlices(state.offset+=3);
-            context.globalAlpha = 1;
-            helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180 });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
-            helpers.Type.positionedText({ context, text: "START GAME", y: 380 });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'startGame',300,365,240, 40, () => { switchScene(Scenes.GAME) });
-            helpers.Type.positionedText({ context, text: "OPTIONS", y: 440 });
-            break;
-        case Scenes.GAME:
-            sky.draw(Skies.BLUE);
             drawBitmapSlices();
-            pointer.draw();
-            golfer.draw();
+            context.globalAlpha = 1;
 
-            // these 2 method calls should only be done once after taking a shot
-            surface.draw(miniMap.checkCollisions(state.player));
-            miniMap.draw(state.player);
+            // projection overlay (this is way faster than image.filter API)
+            context.translate(0, state.projection.height / 2);
+            context.globalAlpha = .25;
+            context.beginPath();
+            context.lineTo(state.projection.width, 0);
+            context.lineTo(state.projection.width, state.projection.height / 2);
+            context.lineTo(0, state.projection.height / 2);
+            context.lineTo(0, 0);
+            context.fillStyle = '#553300';
+            context.fill();
+            context.globalAlpha = 1;
+            context.translate(0, -(state.projection.height / 2));
 
-            // debug: be able to click a point on the minimap to see its projection (without rotation for now)
-            helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerPosition',665,300,160, 300, () => { setPlayerPosition() });
+            // projection movement
+            state.player.y += 2;
+            if (state.player.y > 200 ) { state.player.y = -2000 }
 
-            // todo: move to helper function
-            helpers.Type.positionedText({ context, font: "18px Teko", text: "STROKE", color: "#aa0000", x: 15, y: 30 });
-            helpers.Type.positionedText({ context, font: "70px Teko", text: "12", color: "#ffffff", x: 15, y: 80 });
-            helpers.Type.positionedText({ context, font: "18px Teko", text: "PAR", color: "#aa0000", x: 755, y: 30 });
-            helpers.Type.positionedText({ context, font: "70px Teko", text: "4", color: "#ffffff", x: 745, y: 80 });
+            // texts
+            helpers.Type.positionedText({ context, font: "14px Arial", text: "A game by rvo (c) 2020", x: 600, y: 180 });
+            helpers.Type.positionedText({ context, font: `${titleStartGameFontSize}px Arial`, text: "START GAME", y: 380 });
+            helpers.Type.positionedText({ context, font: `${titleOptionsFontSize}px Arial`, text: "OPTIONS", y: 440 });
 
-            state.player.rotation += 1;
-            if (state.player.rotation > 360) { state.player.rotation = 0 }
-
-            // for now move the player on the miniMap so we can align the projection todo: remove from final
-            // state.player.y -= 2;
-            if (state.player.y < 0) { state.player.y = 1400 }
             break;
+
+        case Scenes.OPTIONS:
+
+            // texts
+            helpers.Type.positionedText({ context, text: state.showRasterLines ? '[x] show raster lines ' : '[  ] show raster lines', y: 80 });
+            helpers.Type.positionedText({ context, text: "< Back to title", x: 20, y: 580 });
+
+            break;
+
+        case Scenes.GAME:
+            sky.draw(Skies.BLUE, state, true, true);
+            drawBitmapSlices();
+            pointers.draw();
+            golfer.draw(state.player);
+            surface.draw(miniMap.checkCollisions(state.player, state.miniMap));
+            miniMap.draw(state.player, state.miniMap);
+            statistics.draw();
+
+            // quick debug:
+            // state.player.angle -= 1;
+            // state.player.y += 2;
+
+            break;
+
         default:
             break;
     }
 
-    helpers.Canvas.rasterLines(context);
+    // on mouseDown, execute the stored action if it exists
+    if (state.mouseDown && state.mouseDownAction) {
+        state.mouseDownAction();
+    }
 
-    requestAnimationFrame(() => { update(); });
+    // these raster lines give the game a nice retro look
+    if (state.showRasterLines) { helpers.Canvas.rasterLines(context) }
+
+    requestAnimationFrame(() => {
+        update();
+    });
 };
 
-// init ball graphic outside of image creation loop so it can be used in the loader
+// init loading visuals outside of image creation loop so it doesnt need to wait for the whole library to be loaded
 const ballImage = new Image();
 ballImage.onload = () => { ball = new Ball(context, ballImage) };
 ballImage.src = 'assets/ball.png';

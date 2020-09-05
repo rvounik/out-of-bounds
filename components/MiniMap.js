@@ -5,20 +5,14 @@ export default class MiniMap {
         this.context = context;
         this.imageId = imageId;
         this.collisionMaps = collisionMaps;
-
-        // set some constants for the dimensions and position of the miniMap
-        this.miniMapProjectionWidth = 160;
-        this.miniMapProjectionHeight = 300;
-        this.miniMapProjectionStartX = 665;
-        this.miniMapProjectionStartY = 300;
-
-        // now calculate how much smaller the miniMap is projected when compared to the original image (this keeps it dynamic)
-        this.division = this.imageId.img.naturalWidth / this.miniMapProjectionWidth;
     }
 
-    checkCollisions(player) {
-
+    checkCollisions(player, miniMap) {
         let surface = SurfaceTypes.FAIRWAY;
+
+        // now calculate how much smaller the miniMap is projected when compared to the original image (this keeps it dynamic)
+        const divisionW = this.imageId.img.width / miniMap.w;
+        const divisionH = this.imageId.img.height / miniMap.h;
 
         Object.keys(this.collisionMaps).map(mapId => {
 
@@ -27,13 +21,22 @@ export default class MiniMap {
 
                 // draw white rectangle
                 this.context.fillStyle = "#17411D";
-                this.context.fillRect(this.miniMapProjectionStartX, this.miniMapProjectionStartY, this.miniMapProjectionWidth, this.miniMapProjectionHeight);
+                this.context.fillRect(
+                    miniMap.x,
+                    miniMap.y,
+                    miniMap.w,
+                    miniMap.h
+                );
 
                 // draw currently handled collision map
                 this.collisionMaps[mapId].draw();
 
                 // get colour values for player x, y
-                const imageData = this.context.getImageData(this.miniMapProjectionStartX + (player.x / this.division), this.miniMapProjectionStartY + (player.y / this.division), 1, 1);
+                const imageData = this.context.getImageData(
+                    miniMap.x - ((player.x - 400) / divisionW),
+                    miniMap.y - ((player.y - 300) / divisionH),
+                    1,
+                    1);
                 const r = imageData.data[0];
                 const g = imageData.data[1];
                 const b = imageData.data[2];
@@ -49,18 +52,30 @@ export default class MiniMap {
         return surface;
     }
 
-    draw(player) {
+    draw(player, miniMap) {
+
+        // now calculate how much smaller the miniMap is projected when compared to the original image (this keeps it dynamic)
+        const divisionW = this.imageId.img.width / miniMap.w;
+        const divisionH = this.imageId.img.height / miniMap.h;
 
         // render a small rectangle representing the ball at the normalised coordinates starting from the offsets previously defined
+        // todo: ofcourse this should render a line instead, with angle utilised to set its rotation
         this.context.fillStyle = "#ffffff";
-        this.context.fillRect(this.miniMapProjectionStartX + (player.x / this.division), this.miniMapProjectionStartY + (player.y / this.division), 5, 5);
+        this.context.fillRect(
+            miniMap.x - 2.5 - ((player.x - 400) / divisionW),
+            miniMap.y - 2.5 - ((player.y - 300) / divisionH),
+            5,
+            5
+        );
 
+        // miniMap is partially transparent
         this.context.globalAlpha = .75;
 
+        // draw the bitmap
         this.context.drawImage(
             this.imageId.img,
-            this.miniMapProjectionStartX, this.miniMapProjectionStartY,
-            this.miniMapProjectionWidth, this.miniMapProjectionHeight
+            miniMap.x, miniMap.y,
+            miniMap.w, miniMap.h
         );
 
         // reset the alpha
