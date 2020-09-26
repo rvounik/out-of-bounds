@@ -34,7 +34,7 @@ export default class Sky {
             this.context.drawImage(
                 this.skies[sky].img,
                 0 ,0,
-                imageWidth, 300
+                imageWidth, state.projection.height / 2
             );
         }
 
