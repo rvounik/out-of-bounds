@@ -11,7 +11,7 @@ export default class Pointers {
         // middle
         this.context.drawImage(
             this.pointer.img,
-            417, 318,
+            397, 318,
             21, 230
         );
 

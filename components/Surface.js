@@ -7,7 +7,7 @@ export default class Surface {
         this.imageId = imageId;
     }
 
-    draw(surface) {
+    draw(surface, startX) {
         const context = this.context;
 
         let imageOffset = 0;
@@ -41,20 +41,23 @@ export default class Surface {
                 fontSize = 16.5;
                 break;
             default:
+
+                // out of bounds is not drawn
+
                 break;
         }
 
         context.fillStyle = "#ffffff";
-        context.fillRect(130, 20, 62, 62);
+        context.fillRect(startX, 20, 62, 62);
 
         context.drawImage(
             this.imageId.img,
             imageOffset, 0,
             100, 100,
-            132, 22,
+            startX + 2, 22,
             58, 58
         );
 
-        Type.positionedText({ context, font: `${fontSize}px Teko `, text: caption, color: "#FFFFFF", x: 130, y: 97 });
+        Type.positionedText({ context, font: `${fontSize}px Teko `, text: caption, color: "#FFFFFF", x: startX, y: 97 });
     }
 }

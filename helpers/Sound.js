@@ -9,6 +9,9 @@ export default class Sound {
         if (loop) {
             audio[0].audio.loop = true;
 
+            audio[0].audio.currentTime = 0;
+            audio[0].audio.position = 0;
+
             // experimental attempt to shave a few ms off the duration in order to force a more seamless loop
             audio[0].audio.addEventListener('timeupdate', function () {
                 let buffer = .24; // a bit magic

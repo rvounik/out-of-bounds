@@ -19,13 +19,13 @@ export default class Golfer {
 
         context.drawImage(
             this.dropShadow.img,
-            255, 555,
+            235, 555,
             133, 33
         );
 
         context.globalAlpha = 1;
 
-        context.translate(240, 260);
+        context.translate(220, 260);
 
         context.save();
 
@@ -48,6 +48,6 @@ export default class Golfer {
 
         context.restore();
 
-        context.translate(-240, -260);
+        context.translate(-220, -260);
     }
 }

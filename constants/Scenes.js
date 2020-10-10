@@ -4,8 +4,7 @@ const Scenes = {
     OPTIONS: 'options',
     PRELUDE: 'prelude',
     TRANSITION: 'transition',
-    GAME: 'game',
-    // FLIGHT: 'flight'
+    GAME: 'game'
 };
 
 export default Scenes;

@@ -1,19 +1,39 @@
 export default class InGameText {
-    constructor(context, images) {
+    constructor(context, image, timeOut) {
         this.context = context;
-        this.images = images;
+        this.image = image;
+        this.timeOut = timeOut;
+
         this.startTimer = 0;
     }
 
-    draw(img, x, y, timeOut = null) {
-        if (timeOut && this.startTimer < timeOut) {
+    draw() {
+        const timeOut = this.timeOut;
+        const image = this.image;
+
+        if (this.startTimer < timeOut) {
+
             this.startTimer ++;
 
+            this.context.save();
+            this.context.translate(400, 220);
+
+            let scaleFactor = .5 + (1 / (50 - this.startTimer));
+
+            if (scaleFactor > 1) {
+                scaleFactor = 1
+            }
+
+            this.context.scale(scaleFactor, scaleFactor);
+
+            this.context.globalAlpha = 1 - (this.startTimer / 60);
+
             this.context.drawImage(
-                this.images[img].img,
-                x, y,
-                this.images[img].img.width, this.images[img].img.height
+                image.img,
+                0 - image.img.width / 2 , 0 - image.img.height / 2,
+                image.img.width, image.img.height
             );
+            this.context.restore();
         }
     }
 }
