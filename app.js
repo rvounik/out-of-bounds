@@ -12,6 +12,7 @@ import Ball from './components/Ball.js';
 import BitmapSlice from './components/BitmapSlice.js';
 import MiniMap from './components/MiniMap.js';
 import Sky from './components/Sky.js';
+import Club from './components/Club.js';
 import Title from './components/Title.js';
 import Golfer from './components/Golfer.js';
 import Panel from './components/Panel.js';
@@ -31,7 +32,7 @@ import Spin from './components/gauges/Spin.js';
 const context = document.getElementById('canvas').getContext('2d');
 
 // init containers that hold the image instances as globals so they can be used everywhere
-let ball, surface, wind, miniMap, sky, title, golfer, power, revert, spin, pointers, statistics, panel;
+let ball, surface, wind, miniMap, sky, club, title, golfer, power, revert, spin, pointers, statistics, panel;
 let collisionMaps = [];
 let inGameTexts = [];
 
@@ -41,7 +42,7 @@ let swingTimer, powerGaugeTimer, downSwingTimer;
 // init specific vars that dont really belong to the runtime state
 let titleStartGameFontSize = 30;
 let titleOptionsFontSize = 30;
-const flightSteps = 100; // amount of steps to take to reach end of ball flight (length of animation)
+const flightSteps = 100;
 let flightOffset = flightSteps;
 
 // dynamic values are kept in local state
@@ -66,10 +67,11 @@ const state = {
         spin: 0,
         oldX: 0,
         oldY: 0,
-        selectedClub: 'iron-8'
+        selectedClub: 'driver'
     },
     swingState: SwingStates.IDLE,
     statistics: {
+        hole: 1,
         stroke: 1,
         par: 4
     },
@@ -108,7 +110,7 @@ const state = {
                 startScale: .5,
                 startAngle: 0,
                 startX: 0,
-                startY: -1620
+                startY: 0
             }
         }
     },
@@ -126,37 +128,131 @@ const state = {
         width: 135,
         height: 300
     },
-    clubTypes: [ /* todo: expand and extract to external */
+    holes: [
         {
-            label: 'wedge',
-            height: 20,
-            distance: 10
-        },
-        {
-            label: 'wood-3',
-            height: 100,
-            distance: 200
-        },
-        {
-            label: 'iron-2',
-            height: 20,
-            distance: 50
-        },
-        {
-            label: 'iron-8',
-            height: 80,
-            distance: 220
-        },
-        {
-            label: 'driver',
-            height: 20,
-            distance: 50
+            id: 1,
+            startX: 0,
+            startY: -1620,
+            startAngle: 0,
+            flagX: 33,
+            flagY: 17,
+            par: 4
         }
+
+    ],
+    clubTypes: [
+        {
+            id: 'driver',
+            label: 'Driver',
+            imageId: 'club-driver',
+            height: 100,
+            distance: 260,
+            precision: 10 // the higher, the more the shot is likely to be inaccurate: some players choose to exclusively hit irons, sacrificing distance for accuracy.
+        },
+        {
+            id: '3-wood',
+            label: 'Wood 3',
+            imageId: 'club-wood',
+            height: 65,
+            distance: 236,
+            precision: 8
+        },
+        {
+            id: '4-wood',
+            label: 'Wood 4',
+            imageId: 'club-wood',
+            height: 55,
+            distance: 224,
+            precision: 7
+        },
+        {
+            id: '2-iron',
+            label: 'Iron 2',
+            imageId: 'club-iron',
+            height: 80,
+            distance: 215,
+            precision: 6.5
+        },
+        {
+            id: '3-iron',
+            label: 'Iron 3',
+            imageId: 'club-iron',
+            height: 75,
+            distance: 203,
+            precision: 6
+        },
+        {
+            id: '4-iron',
+            label: 'Iron 4',
+            imageId: 'club-iron',
+            height: 70,
+            distance: 191,
+            precision: 5.5
+        },
+        {
+            id: '5-iron',
+            label: 'Iron 5',
+            imageId: 'club-iron',
+            height: 65,
+            distance: 179,
+            precision: 5
+        },
+        {
+            id: '6-iron',
+            label: 'Iron 6',
+            imageId: 'club-iron',
+            height: 60,
+            distance: 167,
+            precision: 4.5
+        },
+        {
+            id: '7-iron',
+            label: 'Iron 7',
+            imageId: 'club-iron',
+            height: 55,
+            distance: 155,
+            precision: 4
+        },
+        {
+            id: '8-iron',
+            label: 'Iron 8',
+            imageId: 'club-iron',
+            height: 50,
+            distance: 143,
+            precision: 3.5
+        },
+        {
+            id: '9-iron',
+            label: 'Iron 9',
+            imageId: 'club-iron',
+            height: 45,
+            distance: 131,
+            precision: 3
+        },
+        {
+            id: 'p-wedge',
+            label: 'Pitch wedge',
+            imageId: 'club-wedge',
+            height: 80,
+            distance: 75,
+            precision: 2
+        },
+        {
+            id: 's-wedge',
+            label: 'Sand wedge',
+            imageId: 'club-wedge',
+            height: 80,
+            distance: 60,
+            precision: 2
+        },
+
+
     ],
     mouseDown: false,
     mouseDownAction: null,
     showRasterLines: true,
     panels: {
+        keepPanelsOpen: true,
         panelWidth: 135,
         left: {
             visible: true,
@@ -248,6 +344,34 @@ const images = [
     {
         id: 'out-of-bounds',
         src: 'assets/out-of-bounds.png'
+    },
+    {
+        id: 'club-driver',
+        src: 'assets/club-driver.png'
+    },
+    {
+        id: 'club-iron',
+        src: 'assets/club-iron.png'
+    },
+    {
+        id: 'club-putter',
+        src: 'assets/club-putter.png'
+    },
+    {
+        id: 'club-wedge',
+        src: 'assets/club-wedge.png'
+    },
+    {
+        id: 'club-wood',
+        src: 'assets/club-wood.png'
+    },
+    {
+        id: 'button-close-panel',
+        src: 'assets/button-close-panel.png'
+    },
+    {
+        id: 'elevation',
+        src: 'assets/elevation.png'
     }
 ];
 
@@ -312,15 +436,6 @@ const sounds = [
 ];
 
 /**
- * Attach Audio object to each sound and load its source
- */
-sounds.map(sound => {
-    sound.audio = new Audio();
-    sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices
-    sound.audio.src = sound.src;
-});
-
-/**
  * Check to see if all assets are loaded
  * @returns {boolean} assetsLoaded
  */
@@ -332,7 +447,6 @@ const assetsLoaded = () => {
         }
     }
 
-    // since sounds are often partially loaded depending on browser, check for images last to give it more time to load
     for (let loadedBitmap = 0; loadedBitmap < images.length; loadedBitmap ++) {
         if (!images[loadedBitmap] || images[loadedBitmap].img.naturalWidth <= 0) {
             state.loadingAsset = images[loadedBitmap].src;
@@ -341,6 +455,17 @@ const assetsLoaded = () => {
     }
 
     return true;
+};
+
+/**
+ * Attach Audio object to each sound and load its source
+ */
+const initialiseSounds = () => {
+    sounds.map(sound => {
+        sound.audio = new Audio();
+        sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices
+        sound.audio.src = sound.src;
+    });
 };
 
 /**
@@ -376,6 +501,13 @@ const initialiseImages = () => {
         'evening': images.filter(img => img.id === 'sky')[0],
         'gradient': images.filter(img => img.id === 'sky_gradient')[0]
     });
+    club = new Club(context, {
+        'club-driver': images.filter(img => img.id === 'club-driver')[0],
+        'club-iron': images.filter(img => img.id === 'club-iron')[0],
+        'club-putter': images.filter(img => img.id === 'club-putter')[0],
+        'club-wedge': images.filter(img => img.id === 'club-wedge')[0],
+        'club-wood': images.filter(img => img.id === 'club-wood')[0]
+    });
 
 	// register global event listeners
     window.addEventListener('mousedown', event => mouseDownHandler(event) );
@@ -384,6 +516,7 @@ const initialiseImages = () => {
     // copy localStorage state to local state (if key doesnt exist, set required default value)
     state.audioEnabled = getLocalStorage('audioEnabled') === null ? true : getLocalStorage('audioEnabled');
     state.showRasterLines = getLocalStorage('showRasterLines') === null ? true : getLocalStorage('showRasterLines');
+    state.panels.keepPanelsOpen = getLocalStorage('keepPanelsOpen') === null ? true : getLocalStorage('keepPanelsOpen');
 
     // from now on escape will return to the menu
     document.onkeydown = event => {
@@ -415,7 +548,7 @@ const drawBitmapSlices = (sliceCount) => {
     for (let index = 0; index < sliceCount; index++ ) {
         let slice = new BitmapSlice(
             context,
-            images.filter(img => img.id === 'hole1')[0] // todo: should be set by state: holes: [ 1: { image: 'path' } ]
+            images.filter(img => img.id === `hole${state.statistics.hole}`)[0]
         );
 
         slice.draw(
@@ -481,7 +614,8 @@ const loader = () => {
 
     // switch scene and call init (default: TITLE)
     if (assetsLoaded() && state.scene !== Scenes.TITLE) {
-        initialiseImages();
+        // initialiseImages();
+        // initialiseSounds();
         switchScene(Scenes.TITLE);
     }
 };
@@ -496,6 +630,14 @@ const initProjection = scene => {
     state.player.x = state.projection.initialValues[scene].startX;
     state.player.y = state.projection.initialValues[scene].startY;
     state.player.angle = state.projection.initialValues[scene].startAngle;
+
+    // in case of game scene, take these properties from the hole variables
+    if (scene === Scenes.GAME) {
+        const currentHole = state.holes.filter(hole => hole.id === state.statistics.hole)[0];
+        state.player.x = currentHole.startX;
+        state.player.y = currentHole.startY;
+        state.player.angle = currentHole.startAngle;
+    }
 };
 
 const getLocalStorage = key => {
@@ -523,8 +665,27 @@ const switchScene = scene => {
             initProjection(Scenes.TITLE);
 
             // set game start defaults
+            state.statistics.hole = 1;
+
+            const currentHole = state.holes.filter(hole => hole.id === state.statistics.hole)[0];
+
             state.statistics.stroke = 1;
+            state.statistics.par = currentHole.par;
+            state.player.selectedClub = 'driver'; // todo: redundant when auto-club-select is in place;
             state.collision = 'FAIRWAY';
+
+            // clear all swing timers and such
+            state.player.swing = 1;
+            state.player.power = 0;
+            clearInterval(downSwingTimer);
+            clearInterval(swingTimer);
+            clearInterval(powerGaugeTimer);
+            state.swingState = SwingStates.IDLE;
+            flightOffset = flightSteps;
+            state.player.spin = 0;
+
+            state.panels.left.visible = state.panels.keepPanelsOpen;
+            state.panels.right.visible = state.panels.keepPanelsOpen;
 
             // stop all audio
             if (state.musicPlaying || !state.audioEnabled) {
@@ -533,14 +694,22 @@ const switchScene = scene => {
                 helpers.Sound.stopSound(sounds.filter(soundObj => soundObj.id === 'game_music'));
             }
 
+            sounds.map(sound => {
+                sound.audio = new Audio();
+                sound.audio.preload = "auto"; // note this is inconsistently interpreted across browsers and devices
+                sound.audio.src = sound.src;
+            });
+
             // play title music
             if (!state.musicPlaying && state.audioEnabled) {
-                helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
                 state.musicPlaying = true;
+                helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'title_music'), true);
             }
 
+            // hover handler
             window.addEventListener('mousemove', titleScreenHoverHandler, true);
 
+            // click handler
             helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
             helpers.Canvas.clickableContext(state.clickableContexts, 'startGame', 270, 340, 240, 50, () => { switchScene(Scenes.PRELUDE); });
             helpers.Canvas.clickableContext(state.clickableContexts, 'options', 270, 410, 240, 50, () => { switchScene(Scenes.OPTIONS); });
@@ -551,13 +720,13 @@ const switchScene = scene => {
 
             initProjection(Scenes.OPTIONS);
 
-            helpers.Canvas.clickableContext(state.clickableContexts, 'showRasterLines', 270, 60, 240, 40, () => {
+            helpers.Canvas.clickableContext(state.clickableContexts, 'showRasterLines', 270, 40, 240, 60, () => {
                 state.showRasterLines = !state.showRasterLines;
                 setLocalStorage(
                     'showRasterLines', state.showRasterLines
                 );
             });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'enableAudio', 270, 100, 240, 40, () => {
+            helpers.Canvas.clickableContext(state.clickableContexts, 'enableAudio', 270, 100, 240, 60, () => {
                 state.audioEnabled = !state.audioEnabled;
 
                 // also save it to local storage
@@ -565,7 +734,15 @@ const switchScene = scene => {
                     'audioEnabled', state.audioEnabled
                 );
             });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'backToTitle', 20, 540, 240, 40, () => { switchScene(Scenes.TITLE) });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'keepPanelsOpen', 270, 160, 240, 60, () => {
+                state.panels.keepPanelsOpen = !state.panels.keepPanelsOpen;
+
+                // also save it to local storage
+                setLocalStorage(
+                    'keepPanelsOpen', state.panels.keepPanelsOpen
+                );
+            });
+            helpers.Canvas.clickableContext(state.clickableContexts, 'backToTitle', 20, 540, 240, 60, () => { switchScene(Scenes.TITLE) });
 
             break;
 
@@ -597,11 +774,8 @@ const switchScene = scene => {
 
             // note: initProjection is not used here since the sole purpose of this scene is to transition towards those values
 
-            // player.y is the only exception, this is required for the map not to 'jump upwards'
+            // player.y is the only exception, this is required for the map not to 'jump upwards' (since projection height goes from 600 to 300)
             state.player.y += 600;
-
-            inGameTexts.push(new InGameText(context, images.filter(img => img.id === 'tee-off')[0], state.inGameTextTimeOut));
-            helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'tee_off'), false);
 
 
             break;
@@ -611,11 +785,15 @@ const switchScene = scene => {
             // note: initProjection is not / should not be used here since the transition function ensures these values are eventually reached
             initProjection(Scenes.GAME);
 
-            if (!state.musicPlaying && state.audioEnabled) {
-                helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'game_music'), true);
-                state.musicPlaying = true;
-            }
+            inGameTexts.push(new InGameText(context, images.filter(img => img.id === 'tee-off')[0], state.inGameTextTimeOut));
+            helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'tee_off'), false);
 
+            window.setTimeout(() => {
+                if (!state.musicPlaying && state.audioEnabled) {
+                    helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'game_music'), true);
+                    state.musicPlaying = true;
+                }
+            }, 750);
 
             // assign rotate action to the left arrow
             helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerRotationLeft',160,520,50, 50, () => {
@@ -657,12 +835,12 @@ const switchScene = scene => {
 
                         startDownSwing();
 
-                        // power is so low the down swing spritesheet should jump ahead a bit
+                        // power is so low the down swing sprite sheet should jump ahead a bit
                         if (state.player.power < 80) {
                             state.player.swing = 4;
                         }
 
-                        // power is so low the down swing spritesheet should jump ahead a bit more
+                        // power is so low the down swing sprite sheet should jump ahead a bit more
                         if (state.player.power < 40) {
                             state.player.swing = 5;
                         }
@@ -755,11 +933,10 @@ const normalisePlayerOrientation = orientation => {
 /**
  * Convert player height to the right scaleAmplitude that can be used by the renderer
  * @param {number} height - height (value between 0 - 100)
- * @param {number} power - power (value between 0 - 100)
  * @returns {number} angle
  */
-const normalisePlayerHeight = (height, power) => {
-    const magicNumber =  800 - (Math.pow(power, 2) / 27.5);
+const normalisePlayerHeight = height => {
+    const magicNumber =  800 - (Math.pow(100, 2) / 27.5);
 
     return (state.projection.initialValues.game.scaleAmplitude - ((100 - height) / magicNumber));
 };
@@ -770,7 +947,9 @@ const normalisePlayerHeight = (height, power) => {
  * @returns {number} power
  */
 const normalisePower = power => {
-    return power / 12.5;
+    const magicNumber = 30;
+
+    return (power / magicNumber);
 };
 
 /**
@@ -778,7 +957,7 @@ const normalisePower = power => {
  * @param {number} spin - height (value between 0 - 100)
  * @returns {number} spin
  */
-const normaliseSpin = spin => {
+const normaliseSpin = (spin) => {
     const magicNumber = 2;
 
     return (50 - spin) / magicNumber;
@@ -875,13 +1054,25 @@ const titleScreenHoverHandler = event => {
 const transitionPreludeToGameProjection = () => {
 
     // this tweaks the speed of the transition
-    const multiplier = 2;
+    const multiplier = 1.5;
 
-    // transition for 2d player y position (move from center to bottom of the image because that is where the tee lies)
-    if (state.player.y > state.projection.initialValues[Scenes.GAME].startY) {
+    const currentHole = state.holes.filter(hole => hole.id === state.statistics.hole)[0];
+
+    // transition for 2d player y position
+    if (state.player.y > currentHole.startY) {
         state.player.y-= (multiplier * 12);
+
+        // dont outrun the target
+        if (state.player.y < currentHole.startY) {
+            state.player.y = currentHole.startY;
+        }
     } else {
-        state.player.y = state.projection.initialValues[Scenes.GAME].startY;
+        state.player.y+= (multiplier * 12);
+
+        // dont outrun the target
+        if (state.player.y > currentHole.startY) {
+            state.player.y = currentHole.startY;
+        }
     }
 
     // transition for amplitude
@@ -921,12 +1112,27 @@ const quadraticBezierCurve = (step, startPath, controlPoint, endPath) => {
     };
 };
 
+/**
+ * Convert configured height of the club to a number that can be used by the renderer
+ * @param {number} height - height (value between 0 - 100)
+ * @param {number} power - power (value between 0 - 100)
+ * @returns {number} height
+ */
+const normaliseClubHeight = (height, power) => {
+    const clubPotentialUsed = ((power / 100) * height);
+    return 30 - clubPotentialUsed * (15 / 150); // 15 - 30 is max range
+};
+
 const drawBallFlight = power => {
+
+    const selectedClub = state.clubTypes.filter(club => club.id === state.player.selectedClub)[0];
+
+    const powerByClubType = (normalisePower(power) / 100) * selectedClub.distance;
 
     // curve path should be 0-100 on x axis, 100-0 on y axis
     let startPath = { x: 0, y: 100 };
-    let controlPoint = { x: 30, y: 20 }; // todo: should be affected by club type
-    let endPath = { x: flightSteps, y: 100 };
+    let controlPoint = { x: 30, y: normaliseClubHeight(selectedClub.height, power) };
+    let endPath = { x: 10 + power, y: 100 }; // by x: flightSteps you get a same-width graph every time
 
     // get height on bezier curve
     const pointsOnCurve = quadraticBezierCurve(
@@ -937,13 +1143,14 @@ const drawBallFlight = power => {
     );
 
     // zoom level
-    state.scaleAmplitude = normalisePlayerHeight(pointsOnCurve.y, state.player.power);
+    state.scaleAmplitude = normalisePlayerHeight(pointsOnCurve.y);
 
-    const selectedClub = state.clubTypes.filter(club => club.label === state.player.selectedClub)[0];
+    // spin effect takes spin, club precision and swing power into account to determine hook/slice
+    const spin = ((normaliseSpin(state.player.spin) / 10) * selectedClub.precision) / 10 * (power / 10);
 
-    // x, y translation // todo: should be affected by club type
-    state.player.x+= normalisePower(power) * Math.sin(angleToRadians(state.player.angle + normaliseSpin(state.player.spin)));
-    state.player.y+= normalisePower((power / 100) * selectedClub.distance) * Math.cos(angleToRadians(state.player.angle + normaliseSpin(state.player.spin)));
+    // x, y translation
+    state.player.x+= powerByClubType * Math.sin(angleToRadians(state.player.angle + (power / 100) * spin));
+    state.player.y+= powerByClubType * Math.cos(angleToRadians(state.player.angle + (power / 100) * spin));
 
     if (state.panels.right.visible) {
         drawBallFlightFromSide(startPath, controlPoint, endPath);
@@ -1005,11 +1212,9 @@ const endBallFlight = () => {
  * @param {Object} endPath - object with coordinates of path end
  */
 const drawBallFlightFromSide = (startPath, controlPoint, endPath) => {
-    context.fillStyle = "#4186C4";
-    context.fillRect(680, 100, 115, 50);
 
-    context.fillStyle = "#5C843C";
-    context.fillRect(680, 150, 115, 50);
+    context.save();
+    context.translate(state.panels.right.x, 132);
 
     for (let pathStep = 0; pathStep < flightSteps; pathStep+= 1) {
         let curve = quadraticBezierCurve(
@@ -1019,11 +1224,15 @@ const drawBallFlightFromSide = (startPath, controlPoint, endPath) => {
             endPath
         );
         context.fillStyle = pathStep === flightOffset ? "#ffffff" : "#333333"; // highlight current step position
+
+        // todo: use distanceToFlag once its in to calculate accurate distance to the flag
         context.fillRect(
-            690 + curve.x, 50 + curve.y,
+            24 + (curve.x * 0.8), -30 + curve.y,
             2, 2
         );
     }
+
+    context.restore();
 };
 
 const drawGaugesForSwingState = swingState => {
@@ -1108,19 +1317,36 @@ const getCollision = () => {
     return collisionResult;
 };
 
-const drawPanelContents = () => {
+const drawPanels = () => {
     if (state.panels.left.visible) {
         if (state.panels.left.x < state.panels.left.endX) {
             state.panels.left.x += (state.panels.left.endX - state.panels.left.x) / 4;
         }
 
-        // close gadget todo: improve on UI
+        // close gadget
+        context.drawImage(
+            images.filter(img => img.id === 'button-close-panel')[0].img,
+            state.panels.left.x + state.panels.panelWidth - 5 ,275,
+            11, 11
+        );
+
         helpers.Canvas.clickableContext(state.clickableContexts, 'close_panel_left', 130, 275, 10, 10, () => { state.panels.left.visible = false });
 
     } else {
         if (state.panels.left.x >= (state.panels.left.endX - state.panels.panelWidth)) {
             state.panels.left.x -= (state.panels.left.x - (state.panels.left.endX - state.panels.panelWidth)) / 4;
         }
+
+        context.save();
+        context.translate(400,300);
+        context.rotate(angleToRadians(180));
+        // context.translate(400,-300);
+        context.drawImage(
+            images.filter(img => img.id === 'button-close-panel')[0].img,
+            260-state.panels.left.x - 5 ,10,
+            11, 11
+        );
+        context.restore();
 
         // open gadget
         helpers.Canvas.clickableContext(state.clickableContexts, 'open_panel_left', 0, 275, 10, 10, () => { state.panels.left.visible = true; });
@@ -1135,6 +1361,17 @@ const drawPanelContents = () => {
         }
 
         // close gadget
+        context.save();
+        context.translate(400,300);
+        context.rotate(angleToRadians(180));
+        // context.translate(400,-300);
+        context.drawImage(
+            images.filter(img => img.id === 'button-close-panel')[0].img,
+            400-state.panels.right.x - 5 ,10,
+            11, 11
+        );
+        context.restore();
+
         helpers.Canvas.clickableContext(state.clickableContexts, 'close_panel_right', 660, 275, 10, 10, () => { state.panels.right.visible = false; });
     } else {
         if (state.panels.right.x < state.panels.right.endX + state.panels.panelWidth) {
@@ -1145,8 +1382,96 @@ const drawPanelContents = () => {
         }
 
         // open gadget
+        context.drawImage(
+            images.filter(img => img.id === 'button-close-panel')[0].img,
+            state.panels.right.x - 10 ,275,
+            11, 11
+        );
+
         helpers.Canvas.clickableContext(state.clickableContexts, 'open_panel_right', 790, 275, 10, 10, () => { state.panels.right.visible = true; });
     }
+};
+
+const drawPanelContent = (panel, orientation) => {
+    context.save();
+
+    switch (orientation) {
+        case 'left':
+
+            context.translate(panel.x, 0);
+
+            // selected club
+            const selectedClub = state.clubTypes.filter(club => club.id === state.player.selectedClub)[0];
+            context.fillRect(10, 20, 114, 62);
+            club.draw(selectedClub.imageId, 12, 22);
+
+            context.globalAlpha = .75;
+
+            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 13.5px Arial`, text: `DISTANCE: ${selectedClub.distance}M`, x: 10, y: 98 });
+
+            // club select
+            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 16.8px Arial`, text: "SELECT CLUB", x: 10, y: 145 });
+
+            state.clubTypes.forEach((club, index) => {
+                context.fillStyle = club.id === state.player.selectedClub ? '#FFDF4D' : "#ff9c01";
+                context.fillRect(10, 155 + (index * 34), 115, 30);
+                context.fillStyle = "#ffffff";
+                context.fillRect(10, 155 + (index * 34), 115, 2);
+                helpers.Type.positionedText({ context, color: '#000000', font: `bold 20px Teko`, text: club.label, x: 18, y: 178 + (index * 34) });
+                helpers.Canvas.clickableContext(state.clickableContexts, club.id, 0, 155 + (index *34), 115, 30, () => {
+                    state.player.selectedClub = club.id;
+                });
+            });
+
+            break;
+        case 'right':
+            context.translate(panel.x, 0);
+
+            context.globalAlpha = .75;
+
+            // elevation
+            context.fillRect(10, 20, 114, 62);
+
+            context.drawImage(
+                images.filter(img => img.id === 'elevation')[0].img,
+                12 ,22,
+                110, 58
+            );
+
+            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 12px Arial`, text: "ELEVATION: 2%", x: 10, y: 98 });
+
+            // ball position
+            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 14.7px Arial`, text: "BALL POSITION", x: 10, y: 145 });
+
+            context.fillStyle = "#4186C4";
+            context.fillRect(10, 155, 115, 50);
+
+            context.translate(10, 205);
+            const grd = context.createLinearGradient(0,0,0,50);
+            grd.addColorStop(0,"#538B54");
+            grd.addColorStop(1,"#2D650C");
+            context.fillStyle = grd;
+            context.fillRect(0, 0, 115, 50);
+
+            // golfer sprite
+            context.fillStyle = "#eeeeee";
+            context.fillRect(10, -9, 2, 1);
+            context.fillStyle = "#cc0000";
+            context.fillRect(10, -8, 2, 5);
+            context.fillStyle = "#333399";
+            context.fillRect(10, -5, 2, 5);
+
+            // flag pole
+            context.fillStyle = "#dddddd";
+            context.fillRect(100, -10, 2, 10);
+            context.fillStyle = "#cc0000";
+            context.fillRect(102, -10, 5, 2);
+            break;
+        default:
+            break;
+    }
+
+    context.restore();
 };
 
 /**
@@ -1158,6 +1483,7 @@ const update = () => {
     switch (state.scene) {
         case Scenes.LOADING:
             loader();
+
             break;
 
         case Scenes.TITLE:
@@ -1191,6 +1517,7 @@ const update = () => {
             // add options
             helpers.Type.positionedText({ context, text: state.showRasterLines ? '[x] show raster lines ' : '[  ] show raster lines', y: 80 });
             helpers.Type.positionedText({ context, text: state.audioEnabled ? '[x] enable music ' : '[  ] enable music', y: 140 });
+            helpers.Type.positionedText({ context, text: state.panels.keepPanelsOpen ? '[x] keep panels open ' : '[  ] keep panels open', y: 200 });
             helpers.Type.positionedText({ context, text: "< Back to title", x: 20, y: 580 });
 
             break;
@@ -1288,13 +1615,13 @@ const update = () => {
             panel.draw(state.panels.left, 'left');
             panel.draw(state.panels.right, 'right');
 
-            drawPanelContents();
+            drawPanels();
 
             // if (!state.collision) { state.collision = getCollision(); }
             surface.draw(state.collision, state.panels.panelWidth + state.panels.left.x + 20);// connected to left panel, plus some margin
             wind.draw(state.panels.right.x - 62 - 20); // connected to right panel, minus its own width and some margin
             statistics.draw(state.statistics.stroke, state.statistics.par);
-            miniMap.draw(state.player, state.miniMap);
+            miniMap.draw(state.player, state.miniMap, state.panels.right.x, state.miniMap.y);
 
             // ball flight animation
             if (state.swingState === SwingStates.FLIGHT) {
@@ -1322,24 +1649,8 @@ const update = () => {
                 })
             }
 
-            // clubs
-            context.globalAlpha = .6;
-
-            context.lineWidth = 4;
-            context.strokeStyle = "#ffffff";
-
-            context.save();
-            context.translate(state.panels.left.x, 0);
-
-            // todo: take this from state!
-            const clubs = ['wood 1', 'wood 3', 'wood 5', 'iron 1', 'iron 3', 'iron 5', 'iron 7', 'iron 9', 'sand w'];
-
-            clubs.forEach((club, index) => {
-                context.strokeRect(10, 240 + (index * 40), 80, 30);
-                helpers.Type.positionedText({ context, font: "20px Teko", text: club, color: "#ffffff", x: 20, y: 262 + (index * 40) });
-            });
-
-            context.restore();
+            drawPanelContent(state.panels.left, 'left');
+            drawPanelContent(state.panels.right, 'right');
 
             break;
 
@@ -1366,6 +1677,9 @@ const update = () => {
 const ballImage = new Image();
 ballImage.onload = () => { ball = new Ball(context, ballImage) };
 ballImage.src = 'assets/ball.png';
+
+initialiseImages();
+initialiseSounds();
 
 // call the updater
 update();

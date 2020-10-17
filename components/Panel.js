@@ -27,13 +27,15 @@ export default class Panel {
                 break;
         }
 
-        context.globalAlpha = 1;
-        context.fillStyle = "#cccccc";
-        context.fillRect(
-            panel.x-5, 280,
-            10, 10
-        );
+        // context.globalAlpha = 1;
+        // context.fillStyle = "#cccccc";
+        // context.fillRect(
+        //     panel.x-5, 280,
+        //     10, 10
+        // );
 
         context.restore();
     }
+
+
 }

@@ -4,7 +4,7 @@ export default class MiniMap {
         this.imageId = imageId;
     }
 
-    draw(player, miniMap) {
+    draw(player, miniMap, x, y) {
         const context = this.context;
 
         // now calculate how much smaller the miniMap is projected when compared to the original image (this keeps it dynamic)
@@ -15,8 +15,8 @@ export default class MiniMap {
         // todo: this should render a line instead, with angle utilised to set its rotation
         context.fillStyle = "#ffffff";
         context.fillRect(
-            miniMap.x - 2.5 - ((player.x - 400) / divisionW),
-            miniMap.y - 2.5 - ((player.y - 300) / divisionH),
+            x - 2.5 - ((player.x - 400) / divisionW),
+            y - 2.5 - ((player.y - 300) / divisionH),
             5,
             5
         );
@@ -27,7 +27,7 @@ export default class MiniMap {
         // draw the bitmap
         context.drawImage(
             this.imageId.img,
-            miniMap.x, miniMap.y,
+            x, y,
             miniMap.width, miniMap.height
         );
 
