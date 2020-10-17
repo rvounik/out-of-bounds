@@ -65,7 +65,8 @@ const state = {
         downSwing: 0,
         spin: 0,
         oldX: 0,
-        oldY: 0
+        oldY: 0,
+        selectedClub: 'iron-8'
     },
     swingState: SwingStates.IDLE,
     statistics: {
@@ -129,7 +130,7 @@ const state = {
         {
             label: 'wedge',
             height: 20,
-            distance: 100
+            distance: 10
         },
         {
             label: 'wood-3',
@@ -234,7 +235,7 @@ const images = [
     },
     {
         id: 'spritesheet_golfer',
-        src: 'assets/spritesheet_golfer.png'
+        src: 'assets/spritesheet_golfer.png' // arnold palmer tournament golf (sega megadrive)
     },
     {
         id: 'tee-off',
@@ -266,35 +267,47 @@ images.map(image => {
 const sounds = [
     {
         id: 'title_music',
-        src: 'assets/sound/title.mp3'
+        src: 'assets/sound/title.mp3' // zapsplat.com
     },
     {
         id: 'game_music',
-        src: 'assets/sound/game.mp3'
+        src: 'assets/sound/game.mp3' // zapsplat.com
+    },
+    {
+        id: 'info_screen',
+        src: 'assets/sound/info_screen.mp3' // zapsplat.com
+    },
+    {
+        id: 'end_hole',
+        src: 'assets/sound/end_hole.mp3' // zapsplat.com
+    },
+    {
+        id: 'hit',
+        src: 'assets/sound/hit.mp3' // freesound.org
     },
     {
         id: 'good_shot',
-        src: 'assets/sound/goodshot.mp3'
+        src: 'assets/sound/goodshot.mp3' // fromtexttospeech.com (john)
     },
     {
         id: 'nice_shot',
-        src: 'assets/sound/niceshot.mp3'
+        src: 'assets/sound/niceshot.mp3' // fromtexttospeech.com (john)
     },
     {
         id: 'out_of_bounds',
-        src: 'assets/sound/outofbounds.mp3'
+        src: 'assets/sound/outofbounds.mp3' // fromtexttospeech.com (john)
     },
     {
         id: 'tee_off',
-        src: 'assets/sound/teeoff.mp3'
+        src: 'assets/sound/teeoff.mp3' // fromtexttospeech.com (john)
     },
     {
         id: 'applause_1',
-        src: 'assets/sound/applause1.mp3'
+        src: 'assets/sound/applause1.mp3' // freesoundeffects.com
     },
     {
         id: 'applause_2',
-        src: 'assets/sound/applause2.mp3'
+        src: 'assets/sound/applause2.mp3' // freesoundeffects.com
     }
 ];
 
@@ -567,6 +580,8 @@ const switchScene = scene => {
                 helpers.Sound.stopSound(sounds.filter(soundObj => soundObj.id === 'title_music'));
             }
 
+            helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'info_screen'), false);
+
             initProjection(Scenes.PRELUDE);
 
             // set a projection offset so the map fits the screen and the sky is moved outside the view during the transition
@@ -585,6 +600,10 @@ const switchScene = scene => {
             // player.y is the only exception, this is required for the map not to 'jump upwards'
             state.player.y += 600;
 
+            inGameTexts.push(new InGameText(context, images.filter(img => img.id === 'tee-off')[0], state.inGameTextTimeOut));
+            helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'tee_off'), false);
+
+
             break;
 
         case Scenes.GAME:
@@ -597,9 +616,6 @@ const switchScene = scene => {
                 state.musicPlaying = true;
             }
 
-            inGameTexts.push(new InGameText(context, images.filter(img => img.id === 'tee-off')[0], state.inGameTextTimeOut));
-
-            helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'tee_off'), false);
 
             // assign rotate action to the left arrow
             helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerRotationLeft',160,520,50, 50, () => {
@@ -660,9 +676,10 @@ const switchScene = scene => {
 
                         break;
 
+                    case SwingStates.FLIGHT:
                     case SwingStates.DOWNSWING:
                     case SwingStates.IMPACT:
-                    case SwingStates.FLIGHT:
+
                     default:
                         break;
                 }
@@ -685,6 +702,10 @@ const setSpin = () => {
         // this ensures it is only possible to set spin once
         state.swingState = SwingStates.IMPACT;
 
+        // play sound effect
+        helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'hit'), false);
+
+
         // set flightOffset to start animation
         window.setTimeout(() => {
 
@@ -697,7 +718,7 @@ const setSpin = () => {
 
             // switch swing state
             state.swingState = SwingStates.FLIGHT;
-        }, 600); // small pause before ball flight
+        }, 500); // small pause before ball flight
     }
 };
 
@@ -918,9 +939,11 @@ const drawBallFlight = power => {
     // zoom level
     state.scaleAmplitude = normalisePlayerHeight(pointsOnCurve.y, state.player.power);
 
+    const selectedClub = state.clubTypes.filter(club => club.label === state.player.selectedClub)[0];
+
     // x, y translation // todo: should be affected by club type
     state.player.x+= normalisePower(power) * Math.sin(angleToRadians(state.player.angle + normaliseSpin(state.player.spin)));
-    state.player.y+= normalisePower(power) * Math.cos(angleToRadians(state.player.angle + normaliseSpin(state.player.spin)));
+    state.player.y+= normalisePower((power / 100) * selectedClub.distance) * Math.cos(angleToRadians(state.player.angle + normaliseSpin(state.player.spin)));
 
     if (state.panels.right.visible) {
         drawBallFlightFromSide(startPath, controlPoint, endPath);
@@ -956,7 +979,7 @@ const giveFeedBackOnShot = (power, spin, collision) => {
             helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'nice_shot'), false);
         }
 
-        // for exceptionally long shots, play applause
+        // for exceptionally long shots, give applause
         if (power > 60) {
             helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'applause_1'), false);
         }
@@ -1272,8 +1295,6 @@ const update = () => {
             wind.draw(state.panels.right.x - 62 - 20); // connected to right panel, minus its own width and some margin
             statistics.draw(state.statistics.stroke, state.statistics.par);
             miniMap.draw(state.player, state.miniMap);
-
-            //inGameText.draw('tee-off', 50);
 
             // ball flight animation
             if (state.swingState === SwingStates.FLIGHT) {
