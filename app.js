@@ -73,7 +73,8 @@ const state = {
     statistics: {
         hole: 1,
         stroke: 1,
-        par: 4
+        par: 4,
+        distanceToFlag: 0
     },
     clickableContexts: [], // keeps track of clickable context areas
     mouseX : null,
@@ -147,7 +148,7 @@ const state = {
             imageId: 'club-driver',
             height: 100,
             distance: 260,
-            precision: 10 // the higher, the more the shot is likely to be inaccurate: some players choose to exclusively hit irons, sacrificing distance for accuracy.
+            precision: 10 // the higher, the more the shot is likely to be inaccurate. trade-off between accuracy and distance.
         },
         {
             id: '3-wood',
@@ -268,7 +269,7 @@ const state = {
 };
 
 /**
- * Holds all images used in the game
+ * Set id and source for each of the images used in the game
  * @param {string} id - id to refer to the image
  * @param {string} src - path to the image
  */
@@ -1123,16 +1124,25 @@ const normaliseClubHeight = (height, power) => {
     return 30 - clubPotentialUsed * (15 / 150); // 15 - 30 is max range
 };
 
+/**
+ * Convert actual distance on bitmap to distance converted to projection dimensions, more or less matching the real-life value
+ * @param {number} distance - distance in bitmap pixels
+ * @returns {number} distance in metres
+ */
+const normaliseDistanceToFlag = distance => {
+    const magicNumber = 3.2;
+
+    return distance / magicNumber;
+};
+
 const drawBallFlight = power => {
-
     const selectedClub = state.clubTypes.filter(club => club.id === state.player.selectedClub)[0];
-
     const powerByClubType = (normalisePower(power) / 100) * selectedClub.distance;
 
     // curve path should be 0-100 on x axis, 100-0 on y axis
     let startPath = { x: 0, y: 100 };
     let controlPoint = { x: 30, y: normaliseClubHeight(selectedClub.height, power) };
-    let endPath = { x: 10 + power, y: 100 }; // by x: flightSteps you get a same-width graph every time
+    let endPath = { x: 10 + power, y: 100 }; // by x: flightSteps the width of the graph is fixed
 
     // get height on bezier curve
     const pointsOnCurve = quadraticBezierCurve(
@@ -1212,7 +1222,6 @@ const endBallFlight = () => {
  * @param {Object} endPath - object with coordinates of path end
  */
 const drawBallFlightFromSide = (startPath, controlPoint, endPath) => {
-
     context.save();
     context.translate(state.panels.right.x, 132);
 
@@ -1296,7 +1305,7 @@ const getCollision = () => {
         }
     });
 
-    // // check if player didnt exceed the collision map boundaries
+    // check if player didnt exceed the collision map boundaries
     if (state.player.x > 370 || state.player.y > 140) {
         outOfBounds = true;
     }
@@ -1337,10 +1346,10 @@ const drawPanels = () => {
             state.panels.left.x -= (state.panels.left.x - (state.panels.left.endX - state.panels.panelWidth)) / 4;
         }
 
+        // open gadget
         context.save();
         context.translate(400,300);
         context.rotate(angleToRadians(180));
-        // context.translate(400,-300);
         context.drawImage(
             images.filter(img => img.id === 'button-close-panel')[0].img,
             260-state.panels.left.x - 5 ,10,
@@ -1364,7 +1373,6 @@ const drawPanels = () => {
         context.save();
         context.translate(400,300);
         context.rotate(angleToRadians(180));
-        // context.translate(400,-300);
         context.drawImage(
             images.filter(img => img.id === 'button-close-panel')[0].img,
             400-state.panels.right.x - 5 ,10,
@@ -1472,6 +1480,13 @@ const drawPanelContent = (panel, orientation) => {
     }
 
     context.restore();
+};
+
+const getDistanceToFlag = (x1, y1, x2, y2) => {
+    let a = x1 - x2;
+    let b = y1 - y2;
+
+    return Math.sqrt( a*a + b*b );
 };
 
 /**
@@ -1617,7 +1632,6 @@ const update = () => {
 
             drawPanels();
 
-            // if (!state.collision) { state.collision = getCollision(); }
             surface.draw(state.collision, state.panels.panelWidth + state.panels.left.x + 20);// connected to left panel, plus some margin
             wind.draw(state.panels.right.x - 62 - 20); // connected to right panel, minus its own width and some margin
             statistics.draw(state.statistics.stroke, state.statistics.par);
@@ -1626,6 +1640,12 @@ const update = () => {
             // ball flight animation
             if (state.swingState === SwingStates.FLIGHT) {
                 drawBallFlight(state.player.power);
+            } else {
+
+                // when not in ball flight, update distance
+                const currentHole = state.holes.filter(hole => hole.id = state.statistics.hole)[0];
+                state.statistics.distanceToFlag = normaliseDistanceToFlag(getDistanceToFlag(state.player.x, state.player.y, currentHole.flagX, currentHole.flagY));
+                console.log('updated to ',state.statistics.distanceToFlag)
             }
 
             // gauges and their logic

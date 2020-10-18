@@ -3,7 +3,7 @@ export default class Revert {
         this.context = context;
     }
 
-    draw(revert, power) {
+    draw(revert) {
 
         const startArc = 0.5;
         const endArc = 1.4;
