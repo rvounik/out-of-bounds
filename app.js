@@ -765,9 +765,11 @@ const switchScene = scene => {
             // set a projection offset so the map fits the screen and the sky is moved outside the view during the transition
             state.projection.projectionOffset = 300;
 
-            helpers.Canvas.clickableContext(state.clickableContexts, 'startTransition', 0, 0, 800, 600, () => {
-                switchScene(Scenes.TRANSITION);
-            });
+            window.setTimeout(() => {
+                helpers.Canvas.clickableContext(state.clickableContexts, 'startTransition', 670, 520, 90, 40, () => {
+                    switchScene(Scenes.TRANSITION);
+                });
+            }, 1000);
 
             break;
 
@@ -1645,7 +1647,6 @@ const update = () => {
                 // when not in ball flight, update distance
                 const currentHole = state.holes.filter(hole => hole.id = state.statistics.hole)[0];
                 state.statistics.distanceToFlag = normaliseDistanceToFlag(getDistanceToFlag(state.player.x, state.player.y, currentHole.flagX, currentHole.flagY));
-                console.log('updated to ',state.statistics.distanceToFlag)
             }
 
             // gauges and their logic
