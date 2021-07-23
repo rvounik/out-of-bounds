@@ -11,7 +11,7 @@ export default class Canvas {
     /**
      * Adds a context to the context collection with provided details if it does not exist yet
      */
-    static clickableContext(clickableContexts, id, x, y, width, height, action, repeat = false) {
+    static addClickableContext(clickableContexts, id, x, y, width, height, action, repeat = false) {
         if (clickableContexts.filter(clickableContext => clickableContext.id === id).length === 0) {
             clickableContexts.push({ id, x, y, width, height, action, repeat });
         }

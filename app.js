@@ -42,7 +42,7 @@ let swingTimer, powerGaugeTimer, downSwingTimer;
 // init specific vars that dont really belong to the runtime state
 let titleStartGameFontSize = 30;
 let titleOptionsFontSize = 30;
-const flightSteps = 100;
+const flightSteps = 180;
 let flightOffset = flightSteps;
 
 // dynamic values are kept in local state
@@ -65,6 +65,8 @@ const state = {
         power: 0,
         downSwing: 0,
         spin: 0,
+        impactX: 0,
+        impactY: 0,
         oldX: 0,
         oldY: 0,
         selectedClub: 'driver'
@@ -74,7 +76,11 @@ const state = {
         hole: 1,
         stroke: 1,
         par: 4,
-        distanceToFlag: 0
+        distanceToFlag: 0,
+        wind: {
+            direction: 0,
+            speed: 0
+        }
     },
     clickableContexts: [], // keeps track of clickable context areas
     mouseX : null,
@@ -369,10 +375,6 @@ const images = [
     {
         id: 'button-close-panel',
         src: 'assets/button-close-panel.png'
-    },
-    {
-        id: 'elevation',
-        src: 'assets/elevation.png'
     }
 ];
 
@@ -610,7 +612,7 @@ const loader = () => {
 
     // show bouncing ball animation when available
     if (ball) {
-        ball.draw();
+        ball.animate();
     }
 
     // switch scene and call init (default: TITLE)
@@ -630,6 +632,8 @@ const initProjection = scene => {
     state.scaleAmplitude = state.projection.initialValues[scene].scaleAmplitude;
     state.player.x = state.projection.initialValues[scene].startX;
     state.player.y = state.projection.initialValues[scene].startY;
+    state.player.impactX = 0;
+    state.player.impactY = 0;
     state.player.angle = state.projection.initialValues[scene].startAngle;
 
     // in case of game scene, take these properties from the hole variables
@@ -667,6 +671,8 @@ const switchScene = scene => {
 
             // set game start defaults
             state.statistics.hole = 1;
+            state.statistics.wind.direction = Math.random() * 360;
+            state.statistics.wind.speed = Math.random() * 18;
 
             const currentHole = state.holes.filter(hole => hole.id === state.statistics.hole)[0];
 
@@ -711,9 +717,9 @@ const switchScene = scene => {
             window.addEventListener('mousemove', titleScreenHoverHandler, true);
 
             // click handler
-            helpers.Canvas.clickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'startGame', 270, 340, 240, 50, () => { switchScene(Scenes.PRELUDE); });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'options', 270, 410, 240, 50, () => { switchScene(Scenes.OPTIONS); });
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'gotoHomepage',580,160,180, 30, () => { window.open('http://www.github.com/rvounik') });
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'startGame', 270, 340, 240, 50, () => { switchScene(Scenes.PRELUDE); });
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'options', 270, 410, 240, 50, () => { switchScene(Scenes.OPTIONS); });
 
             break;
 
@@ -721,13 +727,13 @@ const switchScene = scene => {
 
             initProjection(Scenes.OPTIONS);
 
-            helpers.Canvas.clickableContext(state.clickableContexts, 'showRasterLines', 270, 40, 240, 60, () => {
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'showRasterLines', 270, 40, 240, 60, () => {
                 state.showRasterLines = !state.showRasterLines;
                 setLocalStorage(
                     'showRasterLines', state.showRasterLines
                 );
             });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'enableAudio', 270, 100, 240, 60, () => {
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'enableAudio', 270, 100, 240, 60, () => {
                 state.audioEnabled = !state.audioEnabled;
 
                 // also save it to local storage
@@ -735,7 +741,7 @@ const switchScene = scene => {
                     'audioEnabled', state.audioEnabled
                 );
             });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'keepPanelsOpen', 270, 160, 240, 60, () => {
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'keepPanelsOpen', 270, 160, 240, 60, () => {
                 state.panels.keepPanelsOpen = !state.panels.keepPanelsOpen;
 
                 // also save it to local storage
@@ -743,7 +749,7 @@ const switchScene = scene => {
                     'keepPanelsOpen', state.panels.keepPanelsOpen
                 );
             });
-            helpers.Canvas.clickableContext(state.clickableContexts, 'backToTitle', 20, 540, 240, 60, () => { switchScene(Scenes.TITLE) });
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'backToTitle', 20, 540, 240, 60, () => { switchScene(Scenes.TITLE) });
 
             break;
 
@@ -766,7 +772,7 @@ const switchScene = scene => {
             state.projection.projectionOffset = 300;
 
             window.setTimeout(() => {
-                helpers.Canvas.clickableContext(state.clickableContexts, 'startTransition', 670, 520, 90, 40, () => {
+                helpers.Canvas.addClickableContext(state.clickableContexts, 'startTransition', 670, 520, 90, 40, () => {
                     switchScene(Scenes.TRANSITION);
                 });
             }, 1000);
@@ -799,7 +805,7 @@ const switchScene = scene => {
             }, 750);
 
             // assign rotate action to the left arrow
-            helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerRotationLeft',160,520,50, 50, () => {
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'setPlayerRotationLeft',160,520,50, 50, () => {
                 state.player.angle = normalisePlayerOrientation({
                     ...state.player,
                     angle: -state.projection.rotationSpeed
@@ -807,14 +813,14 @@ const switchScene = scene => {
             }, true);
 
             // assign rotate action to the right arrow
-            helpers.Canvas.clickableContext(state.clickableContexts, 'setPlayerRotationRight',605,520,50, 50, () => {
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'setPlayerRotationRight',605,520,50, 50, () => {
                 state.player.angle = normalisePlayerOrientation({
                     ...state.player,
                     angle: +state.projection.rotationSpeed
                 });
             }, true);
 
-            helpers.Canvas.clickableContext(state.clickableContexts, 'swing',270,380,140, 220, () => {
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'swing',270,380,140, 220, () => {
 
                 // clicking the golfer sprite results in any of these defined 'swing states'
                 switch(state.swingState) {
@@ -1132,14 +1138,14 @@ const normaliseClubHeight = (height, power) => {
  * @returns {number} distance in metres
  */
 const normaliseDistanceToFlag = distance => {
-    const magicNumber = 3.2;
+    const magicNumber = 3.85;
 
     return distance / magicNumber;
 };
 
 const drawBallFlight = power => {
     const selectedClub = state.clubTypes.filter(club => club.id === state.player.selectedClub)[0];
-    const powerByClubType = (normalisePower(power) / 100) * selectedClub.distance;
+    const powerByClubType = (normalisePower(power) / flightSteps) * selectedClub.distance;
 
     // curve path should be 0-100 on x axis, 100-0 on y axis
     let startPath = { x: 0, y: 100 };
@@ -1148,7 +1154,7 @@ const drawBallFlight = power => {
 
     // get height on bezier curve
     const pointsOnCurve = quadraticBezierCurve(
-        flightOffset / 100,
+        flightOffset / flightSteps,
         startPath,
         controlPoint,
         endPath
@@ -1161,8 +1167,8 @@ const drawBallFlight = power => {
     const spin = ((normaliseSpin(state.player.spin) / 10) * selectedClub.precision) / 10 * (power / 10);
 
     // x, y translation
-    state.player.x+= powerByClubType * Math.sin(angleToRadians(state.player.angle + (power / 100) * spin));
-    state.player.y+= powerByClubType * Math.cos(angleToRadians(state.player.angle + (power / 100) * spin));
+    state.player.x+= powerByClubType * Math.sin(angleToRadians(state.player.angle + (power / flightSteps) * spin));
+    state.player.y+= powerByClubType * Math.cos(angleToRadians(state.player.angle + (power / flightSteps) * spin));
 
     if (state.panels.right.visible) {
         drawBallFlightFromSide(startPath, controlPoint, endPath);
@@ -1225,13 +1231,19 @@ const endBallFlight = () => {
  */
 const drawBallFlightFromSide = (startPath, controlPoint, endPath) => {
     context.save();
-    context.translate(state.panels.right.x, 132);
+
+    // start position for side-on view of curve trajectory
+    context.translate(state.panels.right.x, -20);
+    context.globalAlpha = .08;
 
     for (let pathStep = 0; pathStep < flightSteps; pathStep+= 1) {
         let curve = quadraticBezierCurve(
-            pathStep / 100,
+            pathStep / flightSteps,
             startPath,
-            controlPoint,
+            {
+                x: controlPoint.x,
+                y: controlPoint.y * 2.5 // quick way to get the curve a bit less tall, requires proper fix
+            },
             endPath
         );
         context.fillStyle = pathStep === flightOffset ? "#ffffff" : "#333333"; // highlight current step position
@@ -1341,7 +1353,7 @@ const drawPanels = () => {
             11, 11
         );
 
-        helpers.Canvas.clickableContext(state.clickableContexts, 'close_panel_left', 130, 275, 10, 10, () => { state.panels.left.visible = false });
+        helpers.Canvas.addClickableContext(state.clickableContexts, 'close_panel_left', 130, 275, 10, 10, () => { state.panels.left.visible = false });
 
     } else {
         if (state.panels.left.x >= (state.panels.left.endX - state.panels.panelWidth)) {
@@ -1360,7 +1372,7 @@ const drawPanels = () => {
         context.restore();
 
         // open gadget
-        helpers.Canvas.clickableContext(state.clickableContexts, 'open_panel_left', 0, 275, 10, 10, () => { state.panels.left.visible = true; });
+        helpers.Canvas.addClickableContext(state.clickableContexts, 'open_panel_left', 0, 275, 10, 10, () => { state.panels.left.visible = true; });
     }
 
     if (state.panels.right.visible) {
@@ -1382,7 +1394,7 @@ const drawPanels = () => {
         );
         context.restore();
 
-        helpers.Canvas.clickableContext(state.clickableContexts, 'close_panel_right', 660, 275, 10, 10, () => { state.panels.right.visible = false; });
+        helpers.Canvas.addClickableContext(state.clickableContexts, 'close_panel_right', 660, 275, 10, 10, () => { state.panels.right.visible = false; });
     } else {
         if (state.panels.right.x < state.panels.right.endX + state.panels.panelWidth) {
             state.panels.right.x += ((state.panels.right.endX + state.panels.panelWidth) - state.panels.right.x) / 4;
@@ -1398,7 +1410,7 @@ const drawPanels = () => {
             11, 11
         );
 
-        helpers.Canvas.clickableContext(state.clickableContexts, 'open_panel_right', 790, 275, 10, 10, () => { state.panels.right.visible = true; });
+        helpers.Canvas.addClickableContext(state.clickableContexts, 'open_panel_right', 790, 275, 10, 10, () => { state.panels.right.visible = true; });
     }
 };
 
@@ -1428,7 +1440,9 @@ const drawPanelContent = (panel, orientation) => {
                 context.fillStyle = "#ffffff";
                 context.fillRect(10, 155 + (index * 34), 115, 2);
                 helpers.Type.positionedText({ context, color: '#000000', font: `bold 20px Teko`, text: club.label, x: 18, y: 178 + (index * 34) });
-                helpers.Canvas.clickableContext(state.clickableContexts, club.id, 0, 155 + (index *34), 115, 30, () => {
+
+                // todo: this shouldnt happen every tick
+                helpers.Canvas.addClickableContext(state.clickableContexts, club.id, 0, 155 + (index * 34), 115, 30, () => {
                     state.player.selectedClub = club.id;
                 });
             });
@@ -1439,29 +1453,20 @@ const drawPanelContent = (panel, orientation) => {
 
             context.globalAlpha = .75;
 
-            // elevation
+            // white
             context.fillRect(10, 20, 114, 62);
 
-            context.drawImage(
-                images.filter(img => img.id === 'elevation')[0].img,
-                12 ,22,
-                110, 58
-            );
-
-            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 12px Arial`, text: "ELEVATION: 2%", x: 10, y: 98 });
-
-            // ball position
-            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 14.7px Arial`, text: "BALL POSITION", x: 10, y: 145 });
-
+            // blue
             context.fillStyle = "#4186C4";
-            context.fillRect(10, 155, 115, 50);
+            context.fillRect(12, 22, 110, 29);
 
-            context.translate(10, 205);
-            const grd = context.createLinearGradient(0,0,0,50);
+            // gradient green
+            context.translate(12, 51);
+            const grd = context.createLinearGradient(0,0,0,29);
             grd.addColorStop(0,"#538B54");
             grd.addColorStop(1,"#2D650C");
             context.fillStyle = grd;
-            context.fillRect(0, 0, 115, 50);
+            context.fillRect(0, 0, 110, 29);
 
             // golfer sprite
             context.fillStyle = "#eeeeee";
@@ -1476,6 +1481,27 @@ const drawPanelContent = (panel, orientation) => {
             context.fillRect(100, -10, 2, 10);
             context.fillStyle = "#cc0000";
             context.fillRect(102, -10, 5, 2);
+
+            context.translate(-12, -51);
+
+            // distance to flag
+            helpers.Type.positionedText({ context, font: "13px Arial", text: `${parseInt(state.statistics.distanceToFlag)} METERS LEFT`, x: 10, y: 97 });
+
+            // ball impact point
+            helpers.Type.positionedText({ context, color: '#ffffff', font: `bold 14.7px Arial`, text: "BALL IMPACT", x: 10, y: 145 });
+
+            ball.draw(10, 155, 115, 115);
+
+            // todo: this shouldnt happen every tick
+            const ballImpactStartX = panel.x;
+            const ballImpactStartY = 210;
+
+            helpers.Canvas.addClickableContext(state.clickableContexts, 'ballImpact', ballImpactStartX, ballImpactStartY, 135, 60, () => {
+                state.player.impactX = (event.clientX - document.getElementById("canvas").offsetLeft) - ballImpactStartX;
+                state.player.impactY = (event.clientY - document.getElementById("canvas").offsetTop) - ballImpactStartY;
+                console.log('set impact at ', state.player.impactX, state.player.impactY)
+            });
+
             break;
         default:
             break;
@@ -1484,6 +1510,9 @@ const drawPanelContent = (panel, orientation) => {
     context.restore();
 };
 
+/**
+ * Returns distance to flag in bitmap pixels
+ */
 const getDistanceToFlag = (x1, y1, x2, y2) => {
     let a = x1 - x2;
     let b = y1 - y2;
@@ -1562,7 +1591,7 @@ const update = () => {
             helpers.Type.positionedText({ context, font: "bold 16px Arial", text: "Par", x: 40, y: 250 });
             helpers.Type.positionedText({ context, font: "16px Arial", text: "4", x: 120, y: 250 });
             helpers.Type.positionedText({ context, font: "bold 16px Arial", text: "Distance", x: 40, y: 290 });
-            helpers.Type.positionedText({ context, font: "16px Arial", text: "512 meters", x: 120, y: 290 });
+            helpers.Type.positionedText({ context, font: "16px Arial", text: "425 meters", x: 120, y: 290 });
             helpers.Type.positionedText({ context, font: "bold 16px Arial", text: "Time", x: 40, y: 330 });
             helpers.Type.positionedText({ context, font: "16px Arial", text: "14:22", x: 120, y: 330 });
             helpers.Type.positionedText({ context, font: "bold 16px Arial", text: "Weather", x: 40, y: 370 });
@@ -1635,9 +1664,29 @@ const update = () => {
             drawPanels();
 
             surface.draw(state.collision, state.panels.panelWidth + state.panels.left.x + 20);// connected to left panel, plus some margin
-            wind.draw(state.panels.right.x - 62 - 20); // connected to right panel, minus its own width and some margin
+
+            // change the wind direction every so often
+            if (parseInt(30 * Math.random()) === 1) {
+                state.statistics.wind.direction = state.statistics.wind.direction + (10 - (20 * Math.random()));
+            }
+
+            // change the wind speed every so often
+            if (parseInt(10 * Math.random()) === 1) {
+                state.statistics.wind.speed = state.statistics.wind.speed + (2 - (4 * Math.random()));
+
+                if (state.statistics.wind.speed < 0) {
+                    state.statistics.wind.speed = 0;
+                }
+            }
+
+            // connected to right panel, minus its own width and some margin
+            wind.draw(state.panels.right.x - 62 - 20, state.statistics.wind.direction, state.statistics.wind.speed, state.player.angle);
+
             statistics.draw(state.statistics.stroke, state.statistics.par);
             miniMap.draw(state.player, state.miniMap, state.panels.right.x, state.miniMap.y);
+
+            drawPanelContent(state.panels.left, 'left');
+            drawPanelContent(state.panels.right, 'right');
 
             // ball flight animation
             if (state.swingState === SwingStates.FLIGHT) {
@@ -1670,8 +1719,6 @@ const update = () => {
                 })
             }
 
-            drawPanelContent(state.panels.left, 'left');
-            drawPanelContent(state.panels.right, 'right');
 
             break;
 
