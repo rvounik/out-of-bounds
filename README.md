@@ -17,11 +17,13 @@ features:
 
 - title screen
 - option screen
-- psseudo-3d projection
+- pseudo-3d projection
 - player rotation
 - side panels that can be hidden
 - club selection
-- a very crude ball trajectory that is far from finished
+- trophy texts
+- unfinished swing / power meter (but it is functional)
+- very crude ball trajectory logic that defies the laws of gravity
 - music, sound effects
 
 rvo, 2020
