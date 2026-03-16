@@ -42,8 +42,12 @@ let swingTimer, powerGaugeTimer, downSwingTimer;
 // init specific vars that dont really belong to the runtime state
 let titleStartGameFontSize = 30;
 let titleOptionsFontSize = 30;
-const flightSteps = 180;
+const flightSteps = 300;
 let flightOffset = flightSteps;
+let bounceOffset = 0;
+const bounceSteps = 60; // ~1 second of bouncing
+let bounceDx = 0;
+let bounceDy = 0;
 
 // dynamic values are kept in local state
 const state = {
@@ -671,8 +675,8 @@ const switchScene = scene => {
 
             // set game start defaults
             state.statistics.hole = 1;
-            state.statistics.wind.direction = Math.random() * 360;
-            state.statistics.wind.speed = Math.random() * 18;
+            state.statistics.wind.direction = 90; // fixed sideways for testing (was: Math.random() * 360)
+            state.statistics.wind.speed = 28; // max wind for testing (was: Math.random() * 18)
 
             const currentHole = state.holes.filter(hole => hole.id === state.statistics.hole)[0];
 
@@ -1122,6 +1126,23 @@ const quadraticBezierCurve = (step, startPath, controlPoint, endPath) => {
 };
 
 /**
+ * Calculate point(s) along a cubic bezier curve
+ * @param {number} t - step offset (0-1)
+ * @param {Object} p0 - start point
+ * @param {Object} p1 - first control point (determines launch angle)
+ * @param {Object} p2 - second control point (determines landing angle)
+ * @param {Object} p3 - end point
+ * @returns {Object} object with coordinates
+ */
+const cubicBezierCurve = (t, p0, p1, p2, p3) => {
+    const mt = 1 - t;
+    return {
+        x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x,
+        y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y
+    };
+};
+
+/**
  * Convert configured height of the club to a number that can be used by the renderer
  * @param {number} height - height (value between 0 - 100)
  * @param {number} power - power (value between 0 - 100)
@@ -1129,7 +1150,7 @@ const quadraticBezierCurve = (step, startPath, controlPoint, endPath) => {
  */
 const normaliseClubHeight = (height, power) => {
     const clubPotentialUsed = ((power / 100) * height);
-    return 30 - clubPotentialUsed * (15 / 150); // 15 - 30 is max range
+    return 80 - clubPotentialUsed * (60 / 100); // 20 (full driver) to 80 (no power, low arc)
 };
 
 /**
@@ -1163,12 +1184,26 @@ const drawBallFlight = power => {
     // zoom level
     state.scaleAmplitude = normalisePlayerHeight(pointsOnCurve.y);
 
+    // how high the ball is (0 at ground, peaks mid-flight) — used to scale wind effect
+    const ballAltitude = (100 - pointsOnCurve.y) / 100;
+
     // spin effect takes spin, club precision and swing power into account to determine hook/slice
     const spin = ((normaliseSpin(state.player.spin) / 10) * selectedClub.precision) / 10 * (power / 10);
 
     // x, y translation
-    state.player.x+= powerByClubType * Math.sin(angleToRadians(state.player.angle + (power / flightSteps) * spin));
-    state.player.y+= powerByClubType * Math.cos(angleToRadians(state.player.angle + (power / flightSteps) * spin));
+    let dx = powerByClubType * Math.sin(angleToRadians(state.player.angle + (power / flightSteps) * spin));
+    let dy = powerByClubType * Math.cos(angleToRadians(state.player.angle + (power / flightSteps) * spin));
+
+    // wind effect: stronger when ball is higher, scaled by wind speed and shot power
+    const windSpeed = state.statistics.wind.speed;
+    const windDir = angleToRadians(state.statistics.wind.direction);
+    const powerFactor = power / 100;
+    const windStrength = ballAltitude * powerFactor * windSpeed * 0.15;
+    dx += windStrength * Math.sin(windDir);
+    dy += windStrength * Math.cos(windDir);
+
+    state.player.x += dx;
+    state.player.y += dy;
 
     if (state.panels.right.visible) {
         drawBallFlightFromSide(startPath, controlPoint, endPath);
@@ -1177,11 +1212,13 @@ const drawBallFlight = power => {
     // increment offset
     flightOffset += 1;
 
-    // reached end of flight
+    // reached end of flight — start bounce with carry-over momentum
     if (flightOffset === flightSteps) {
+        bounceDx = dx;
+        bounceDy = dy;
         state.collision = getCollision(); // update the surface indicator
         giveFeedBackOnShot(state.player.power, state.player.spin, state.collision); // check if the shot was good
-        endBallFlight(); // reset some parameters used for the ball flight
+        startBounce();
     }
 };
 
@@ -1212,10 +1249,42 @@ const giveFeedBackOnShot = (power, spin, collision) => {
 };
 
 /**
+ * Starts the bounce animation after ball lands
+ */
+const startBounce = () => {
+    bounceOffset = 0;
+    state.swingState = SwingStates.BOUNCE;
+};
+
+/**
+ * Animates a few diminishing hops after landing
+ */
+const drawBounce = () => {
+    const t = bounceOffset / bounceSteps;
+    const bounceCount = 3;
+    const decay = 1 - t; // amplitude shrinks over time
+    const amplitude = decay * (state.player.power / 100) * 8; // scale with shot power
+    const hop = Math.abs(Math.sin(t * bounceCount * Math.PI)) * amplitude;
+
+    state.scaleAmplitude = normalisePlayerHeight(100 - hop);
+
+    // roll forward with decaying momentum
+    state.player.x += bounceDx * decay;
+    state.player.y += bounceDy * decay;
+
+    bounceOffset++;
+
+    if (bounceOffset >= bounceSteps) {
+        endBallFlight();
+    }
+};
+
+/**
  * Resets all values associated with ball flight
  */
 const endBallFlight = () => {
     flightOffset = flightSteps;
+    bounceOffset = 0;
     state.swingState = SwingStates.IDLE;
     state.player.power = 0;
     state.player.spin = 0;
@@ -1691,6 +1760,8 @@ const update = () => {
             // ball flight animation
             if (state.swingState === SwingStates.FLIGHT) {
                 drawBallFlight(state.player.power);
+            } else if (state.swingState === SwingStates.BOUNCE) {
+                drawBounce();
             } else {
 
                 // when not in ball flight, update distance
@@ -1701,8 +1772,8 @@ const update = () => {
             // gauges and their logic
             drawGaugesForSwingState(state.swingState);
 
-            // draw golfer (except when in flight)
-            if (state.swingState !== SwingStates.FLIGHT) {
+            // draw golfer (except when in flight or bouncing)
+            if (state.swingState !== SwingStates.FLIGHT && state.swingState !== SwingStates.BOUNCE) {
                 golfer.draw(state.player);
             }
 

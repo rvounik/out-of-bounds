@@ -4,7 +4,8 @@ const SwingStates = {
     DOWNSWING: 'downswing',
     SPIN: 'spin',
     IMPACT: 'impact',
-    FLIGHT: 'flight'
+    FLIGHT: 'flight',
+    BOUNCE: 'bounce'
 };
 
 export default SwingStates;
