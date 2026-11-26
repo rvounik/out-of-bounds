@@ -28,6 +28,9 @@ import Power from './components/gauges/Power.js';
 import Revert from './components/gauges/Revert.js';
 import Spin from './components/gauges/Spin.js';
 
+// physics
+import { createBall, stepBall, simulate, calibrateLaunchSpeed, Phases, STEP } from './physics/BallFlight.js';
+
 // globals
 const context = document.getElementById('canvas').getContext('2d');
 
@@ -42,12 +45,13 @@ let swingTimer, powerGaugeTimer, downSwingTimer;
 // init specific vars that dont really belong to the runtime state
 let titleStartGameFontSize = 30;
 let titleOptionsFontSize = 30;
-const flightSteps = 300;
-let flightOffset = flightSteps;
-let bounceOffset = 0;
-const bounceSteps = 60; // ~1 second of bouncing
-let bounceDx = 0;
-let bounceDy = 0;
+const pixelsPerMetre = 3.85; // scale of the hole bitmaps
+const flightTimeScale = 1; // 1 is real time, lower this to slow the ball flight down
+const windEffect = .35; // how much of the displayed wind speed actually acts on the ball
+const cameraEyeHeight = 3; // height of the camera above the ball in metres. the lower, the more dramatic the lift-off
+const powerCurve = .6; // maps the power gauge to ball speed in such a way that half a swing gives roughly half the distance
+let flight = null; // holds the ball in flight and everything required to draw it
+let lastFrameTime = performance.now();
 
 // dynamic values are kept in local state
 const state = {
@@ -156,7 +160,8 @@ const state = {
             id: 'driver',
             label: 'Driver',
             imageId: 'club-driver',
-            height: 100,
+            launchAngle: 11, // degrees
+            backspin: 2700, // rpm
             distance: 260,
             precision: 10 // the higher, the more the shot is likely to be inaccurate. trade-off between accuracy and distance.
         },
@@ -164,7 +169,8 @@ const state = {
             id: '3-wood',
             label: 'Wood 3',
             imageId: 'club-wood',
-            height: 65,
+            launchAngle: 11.5, // degrees
+            backspin: 3500, // rpm
             distance: 236,
             precision: 8
         },
@@ -172,7 +178,8 @@ const state = {
             id: '4-wood',
             label: 'Wood 4',
             imageId: 'club-wood',
-            height: 55,
+            launchAngle: 12, // degrees
+            backspin: 3900, // rpm
             distance: 224,
             precision: 7
         },
@@ -180,7 +187,8 @@ const state = {
             id: '2-iron',
             label: 'Iron 2',
             imageId: 'club-iron',
-            height: 80,
+            launchAngle: 12, // degrees
+            backspin: 4000, // rpm
             distance: 215,
             precision: 6.5
         },
@@ -188,7 +196,8 @@ const state = {
             id: '3-iron',
             label: 'Iron 3',
             imageId: 'club-iron',
-            height: 75,
+            launchAngle: 13, // degrees
+            backspin: 4400, // rpm
             distance: 203,
             precision: 6
         },
@@ -196,7 +205,8 @@ const state = {
             id: '4-iron',
             label: 'Iron 4',
             imageId: 'club-iron',
-            height: 70,
+            launchAngle: 14, // degrees
+            backspin: 4800, // rpm
             distance: 191,
             precision: 5.5
         },
@@ -204,7 +214,8 @@ const state = {
             id: '5-iron',
             label: 'Iron 5',
             imageId: 'club-iron',
-            height: 65,
+            launchAngle: 15, // degrees
+            backspin: 5300, // rpm
             distance: 179,
             precision: 5
         },
@@ -212,7 +223,8 @@ const state = {
             id: '6-iron',
             label: 'Iron 6',
             imageId: 'club-iron',
-            height: 60,
+            launchAngle: 16.5, // degrees
+            backspin: 6000, // rpm
             distance: 167,
             precision: 4.5
         },
@@ -220,7 +232,8 @@ const state = {
             id: '7-iron',
             label: 'Iron 7',
             imageId: 'club-iron',
-            height: 55,
+            launchAngle: 18, // degrees
+            backspin: 6800, // rpm
             distance: 155,
             precision: 4
         },
@@ -228,7 +241,8 @@ const state = {
             id: '8-iron',
             label: 'Iron 8',
             imageId: 'club-iron',
-            height: 50,
+            launchAngle: 20, // degrees
+            backspin: 7600, // rpm
             distance: 143,
             precision: 3.5
         },
@@ -236,7 +250,8 @@ const state = {
             id: '9-iron',
             label: 'Iron 9',
             imageId: 'club-iron',
-            height: 45,
+            launchAngle: 22.5, // degrees
+            backspin: 8400, // rpm
             distance: 131,
             precision: 3
         },
@@ -244,7 +259,8 @@ const state = {
             id: 'p-wedge',
             label: 'Pitch wedge',
             imageId: 'club-wedge',
-            height: 80,
+            launchAngle: 30, // degrees
+            backspin: 8000, // rpm
             distance: 75,
             precision: 2
         },
@@ -252,7 +268,8 @@ const state = {
             id: 's-wedge',
             label: 'Sand wedge',
             imageId: 'club-wedge',
-            height: 80,
+            launchAngle: 34, // degrees
+            backspin: 8500, // rpm
             distance: 60,
             precision: 2
         },
@@ -277,6 +294,11 @@ const state = {
         }
     }
 };
+
+// derive the launch speed of each club from the distance it should cover with a full swing
+state.clubTypes.forEach(club => {
+    club.launchSpeed = calibrateLaunchSpeed(club);
+});
 
 /**
  * Set id and source for each of the images used in the game
@@ -692,7 +714,7 @@ const switchScene = scene => {
             clearInterval(swingTimer);
             clearInterval(powerGaugeTimer);
             state.swingState = SwingStates.IDLE;
-            flightOffset = flightSteps;
+            flight = null;
             state.player.spin = 0;
 
             state.panels.left.visible = state.panels.keepPanelsOpen;
@@ -897,19 +919,8 @@ const setSpin = () => {
         helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'hit'), false);
 
 
-        // set flightOffset to start animation
-        window.setTimeout(() => {
-
-            // store the old position
-            state.player.oldX = state.player.x;
-            state.player.oldY = state.player.y;
-
-            // start animation
-            flightOffset = 0;
-
-            // switch swing state
-            state.swingState = SwingStates.FLIGHT;
-        }, 500); // small pause before ball flight
+        // small pause before ball flight
+        window.setTimeout(launchBall, 500);
     }
 };
 
@@ -944,36 +955,13 @@ const normalisePlayerOrientation = orientation => {
 };
 
 /**
- * Convert player height to the right scaleAmplitude that can be used by the renderer
- * @param {number} height - height (value between 0 - 100)
- * @returns {number} angle
+ * Convert height of the ball above the ground to the scaleAmplitude that can be used by the renderer. Perspective
+ * makes the ground shrink in proportion to the height of the camera, so this is an inverse relation
+ * @param {number} height - height in metres
+ * @returns {number} scaleAmplitude
  */
-const normalisePlayerHeight = height => {
-    const magicNumber =  800 - (Math.pow(100, 2) / 27.5);
-
-    return (state.projection.initialValues.game.scaleAmplitude - ((100 - height) / magicNumber));
-};
-
-/**
- * Convert power of the swing to a number that can be used by the renderer
- * @param {number} power - power (value between 0 - 100)
- * @returns {number} power
- */
-const normalisePower = power => {
-    const magicNumber = 30;
-
-    return (power / magicNumber);
-};
-
-/**
- * Convert value of spin gauge at time of impact to a value representing spin (hook / slice)
- * @param {number} spin - height (value between 0 - 100)
- * @returns {number} spin
- */
-const normaliseSpin = (spin) => {
-    const magicNumber = 2;
-
-    return (50 - spin) / magicNumber;
+const cameraAmplitudeForHeight = height => {
+    return state.projection.initialValues.game.scaleAmplitude * (cameraEyeHeight / (cameraEyeHeight + Math.max(0, height)));
 };
 
 /**
@@ -1111,49 +1099,6 @@ const transitionPreludeToGameProjection = () => {
 };
 
 /**
- * Calculate point(s) along a quadratic bezier curve
- * @param {number} step - step offset of the path to return coordinates for
- * @param {Object} startPath - object with coordinates of path start
- * @param {Object} controlPoint - object with coordinates of control point
- * @param {Object} endPath - object with coordinates of path end
- * @returns {Object} object with coordinates
- */
-const quadraticBezierCurve = (step, startPath, controlPoint, endPath) => {
-    return {
-        x: (1 - step) * (1 - step) * startPath.x + 2 * (1 - step) * step * controlPoint.x + step * step * endPath.x,
-        y: (1 - step) * (1 - step) * startPath.y + 2 * (1 - step) * step * controlPoint.y + step * step * endPath.y
-    };
-};
-
-/**
- * Calculate point(s) along a cubic bezier curve
- * @param {number} t - step offset (0-1)
- * @param {Object} p0 - start point
- * @param {Object} p1 - first control point (determines launch angle)
- * @param {Object} p2 - second control point (determines landing angle)
- * @param {Object} p3 - end point
- * @returns {Object} object with coordinates
- */
-const cubicBezierCurve = (t, p0, p1, p2, p3) => {
-    const mt = 1 - t;
-    return {
-        x: mt*mt*mt*p0.x + 3*mt*mt*t*p1.x + 3*mt*t*t*p2.x + t*t*t*p3.x,
-        y: mt*mt*mt*p0.y + 3*mt*mt*t*p1.y + 3*mt*t*t*p2.y + t*t*t*p3.y
-    };
-};
-
-/**
- * Convert configured height of the club to a number that can be used by the renderer
- * @param {number} height - height (value between 0 - 100)
- * @param {number} power - power (value between 0 - 100)
- * @returns {number} height
- */
-const normaliseClubHeight = (height, power) => {
-    const clubPotentialUsed = ((power / 100) * height);
-    return 80 - clubPotentialUsed * (60 / 100); // 20 (full driver) to 80 (no power, low arc)
-};
-
-/**
  * Convert actual distance on bitmap to distance converted to projection dimensions, more or less matching the real-life value
  * @param {number} distance - distance in bitmap pixels
  * @returns {number} distance in metres
@@ -1164,61 +1109,109 @@ const normaliseDistanceToFlag = distance => {
     return distance / magicNumber;
 };
 
-const drawBallFlight = power => {
-    const selectedClub = state.clubTypes.filter(club => club.id === state.player.selectedClub)[0];
-    const powerByClubType = (normalisePower(power) / flightSteps) * selectedClub.distance;
+/**
+ * Returns the velocity of the air in m/s, in the same axes as the player position
+ */
+const getWindVector = () => {
+    const direction = angleToRadians(state.statistics.wind.direction);
+    const speed = state.statistics.wind.speed * windEffect;
 
-    // curve path should be 0-100 on x axis, 100-0 on y axis
-    let startPath = { x: 0, y: 100 };
-    let controlPoint = { x: 30, y: normaliseClubHeight(selectedClub.height, power) };
-    let endPath = { x: 10 + power, y: 100 }; // by x: flightSteps the width of the graph is fixed
+    return { x: speed * Math.sin(direction), y: speed * Math.cos(direction) };
+};
 
-    // get height on bezier curve
-    const pointsOnCurve = quadraticBezierCurve(
-        flightOffset / flightSteps,
-        startPath,
-        controlPoint,
-        endPath
-    );
+/**
+ * Sends the ball on its way using the power and spin that were set with the gauges
+ */
+const launchBall = () => {
 
-    // zoom level
-    state.scaleAmplitude = normalisePlayerHeight(pointsOnCurve.y);
-
-    // how high the ball is (0 at ground, peaks mid-flight) — used to scale wind effect
-    const ballAltitude = (100 - pointsOnCurve.y) / 100;
-
-    // spin effect takes spin, club precision and swing power into account to determine hook/slice
-    const spin = ((normaliseSpin(state.player.spin) / 10) * selectedClub.precision) / 10 * (power / 10);
-
-    // x, y translation
-    let dx = powerByClubType * Math.sin(angleToRadians(state.player.angle + (power / flightSteps) * spin));
-    let dy = powerByClubType * Math.cos(angleToRadians(state.player.angle + (power / flightSteps) * spin));
-
-    // wind effect: stronger when ball is higher, scaled by wind speed and shot power
-    const windSpeed = state.statistics.wind.speed;
-    const windDir = angleToRadians(state.statistics.wind.direction);
-    const powerFactor = power / 100;
-    const windStrength = ballAltitude * powerFactor * windSpeed * 0.15;
-    dx += windStrength * Math.sin(windDir);
-    dy += windStrength * Math.cos(windDir);
-
-    state.player.x += dx;
-    state.player.y += dy;
-
-    if (state.panels.right.visible) {
-        drawBallFlightFromSide(startPath, controlPoint, endPath);
+    // player may have left the game in the meantime
+    if (state.scene !== Scenes.GAME || state.swingState !== SwingStates.IMPACT) {
+        return;
     }
 
-    // increment offset
-    flightOffset += 1;
+    const selectedClub = state.clubTypes.filter(club => club.id === state.player.selectedClub)[0];
+    const power = Math.pow(state.player.power / 100, powerCurve);
 
-    // reached end of flight — start bounce with carry-over momentum
-    if (flightOffset === flightSteps) {
-        bounceDx = dx;
-        bounceDy = dy;
-        state.collision = getCollision(); // update the surface indicator
-        giveFeedBackOnShot(state.player.power, state.player.spin, state.collision); // check if the shot was good
-        startBounce();
+    // the spin gauge is dead straight at 50: clicking early hooks the ball (left), late slices it (right).
+    // the less precise the club, the more the spin axis tilts and the more the ball curves
+    const spinTilt = angleToRadians(((state.player.spin - 50) / 50) * selectedClub.precision * 2);
+
+    const ball = createBall({
+        x: state.player.x / pixelsPerMetre,
+        y: state.player.y / pixelsPerMetre,
+        heading: angleToRadians(state.player.angle),
+        club: selectedClub,
+        power,
+        spinTilt
+    });
+
+    // run a copy of the ball ahead of time to get the path to show in the side-on view
+    const path = [];
+    let pathApex = 0;
+    let step = 0;
+    const predicted = simulate({ ...ball }, getWindVector(), () => 'FAIRWAY', predictedBall => {
+        pathApex = Math.max(pathApex, predictedBall.z);
+
+        if (step++ % 12 === 0) {
+            path.push({
+                distance: Math.hypot(predictedBall.x - ball.x, predictedBall.y - ball.y),
+                height: predictedBall.z
+            });
+        }
+    });
+
+    flight = {
+        ball,
+        startX: ball.x,
+        startY: ball.y,
+        path,
+        pathApex,
+        pathLength: Math.hypot(predicted.x - ball.x, predicted.y - ball.y),
+        distanceToFlag: state.statistics.distanceToFlag,
+        oldCollision: state.collision,
+        cameraHeight: 0,
+        accumulator: 0
+    };
+
+    // store the old position
+    state.player.oldX = state.player.x;
+    state.player.oldY = state.player.y;
+
+    state.swingState = SwingStates.FLIGHT;
+};
+
+/**
+ * Advances the ball in flight by the time that passed since the last frame and lets the camera follow it
+ * @param {number} dt - elapsed time in seconds
+ */
+const updateBallFlight = dt => {
+    const { ball } = flight;
+    const wind = getWindVector();
+    const surfaceAt = (x, y) => getSurfaceAt(x * pixelsPerMetre, y * pixelsPerMetre);
+
+    // the physics run in fixed steps so the flight is identical regardless of the frame rate
+    flight.accumulator += dt * flightTimeScale;
+
+    while (flight.accumulator >= STEP && ball.phase !== Phases.REST) {
+        stepBall(ball, wind, STEP, surfaceAt);
+        flight.accumulator -= STEP;
+    }
+
+    // the camera travels with the ball
+    state.player.x = ball.x * pixelsPerMetre;
+    state.player.y = ball.y * pixelsPerMetre;
+
+    // follow the height with a tiny bit of lag, this takes the harsh edge off the bounces
+    flight.cameraHeight += (ball.z - flight.cameraHeight) * (1 - Math.exp(-dt / .05));
+    state.scaleAmplitude = cameraAmplitudeForHeight(flight.cameraHeight);
+
+    // first touch down
+    if (ball.bounces > 0 && state.swingState === SwingStates.FLIGHT) {
+        state.swingState = SwingStates.BOUNCE;
+    }
+
+    if (ball.phase === Phases.REST) {
+        endBallFlight();
     }
 };
 
@@ -1249,42 +1242,29 @@ const giveFeedBackOnShot = (power, spin, collision) => {
 };
 
 /**
- * Starts the bounce animation after ball lands
- */
-const startBounce = () => {
-    bounceOffset = 0;
-    state.swingState = SwingStates.BOUNCE;
-};
-
-/**
- * Animates a few diminishing hops after landing
- */
-const drawBounce = () => {
-    const t = bounceOffset / bounceSteps;
-    const bounceCount = 3;
-    const decay = 1 - t; // amplitude shrinks over time
-    const amplitude = decay * (state.player.power / 100) * 8; // scale with shot power
-    const hop = Math.abs(Math.sin(t * bounceCount * Math.PI)) * amplitude;
-
-    state.scaleAmplitude = normalisePlayerHeight(100 - hop);
-
-    // roll forward with decaying momentum
-    state.player.x += bounceDx * decay;
-    state.player.y += bounceDy * decay;
-
-    bounceOffset++;
-
-    if (bounceOffset >= bounceSteps) {
-        endBallFlight();
-    }
-};
-
-/**
- * Resets all values associated with ball flight
+ * Resets all values associated with ball flight and deals with where the ball ended up
  */
 const endBallFlight = () => {
-    flightOffset = flightSteps;
-    bounceOffset = 0;
+    const surface = flight.ball.surface;
+
+    if (surface === 'OUT') {
+        inGameTexts.push(new InGameText(context, images.filter(img => img.id === 'out-of-bounds')[0], state.inGameTextTimeOut));
+
+        helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'out_of_bounds'), false);
+
+        // reset to old position
+        state.player.x = state.player.oldX;
+        state.player.y = state.player.oldY;
+        state.collision = flight.oldCollision;
+
+        // penalty stroke
+        state.statistics.stroke++;
+    } else {
+        state.collision = SurfaceTypes[surface]; // update the surface indicator
+        giveFeedBackOnShot(state.player.power, state.player.spin, state.collision); // check if the shot was good
+    }
+
+    flight = null;
     state.swingState = SwingStates.IDLE;
     state.player.power = 0;
     state.player.spin = 0;
@@ -1293,36 +1273,32 @@ const endBallFlight = () => {
 };
 
 /**
- * Draws a 2d curve representing the trajectory of the ball
- * @param {Object} startPath - object with coordinates of path start
- * @param {Object} controlPoint - object with coordinates of control point
- * @param {Object} endPath - object with coordinates of path end
+ * Draws a side-on view of the trajectory in the right panel: the predicted path, and where the ball is right now
  */
-const drawBallFlightFromSide = (startPath, controlPoint, endPath) => {
+const drawBallFlightFromSide = () => {
+    const { ball, path } = flight;
+    const width = 88; // pixels between the golfer and the flag in the panel
+    const height = 26; // pixels of sky above the ground line in the panel
+    const horizontalScale = width / Math.max(flight.distanceToFlag, flight.pathLength, 1);
+    const verticalScale = height / Math.max(flight.pathApex, 40);
+
     context.save();
 
-    // start position for side-on view of curve trajectory
-    context.translate(state.panels.right.x, -20);
-    context.globalAlpha = .08;
+    // origin at the feet of the little golfer
+    context.translate(state.panels.right.x + 23, 51);
 
-    for (let pathStep = 0; pathStep < flightSteps; pathStep+= 1) {
-        let curve = quadraticBezierCurve(
-            pathStep / flightSteps,
-            startPath,
-            {
-                x: controlPoint.x,
-                y: controlPoint.y * 2.5 // quick way to get the curve a bit less tall, requires proper fix
-            },
-            endPath
-        );
-        context.fillStyle = pathStep === flightOffset ? "#ffffff" : "#333333"; // highlight current step position
+    context.globalAlpha = .5;
+    context.fillStyle = "#333333";
+    path.forEach(point => {
+        context.fillRect(point.distance * horizontalScale, -point.height * verticalScale - 2, 2, 2);
+    });
 
-        // todo: use distanceToFlag once its in to calculate accurate distance to the flag
-        context.fillRect(
-            24 + (curve.x * 0.8), -30 + curve.y,
-            2, 2
-        );
-    }
+    context.globalAlpha = 1;
+    context.fillStyle = "#ffffff";
+    context.fillRect(
+        Math.hypot(ball.x - flight.startX, ball.y - flight.startY) * horizontalScale - 1, -ball.z * verticalScale - 3,
+        3, 3
+    );
 
     context.restore();
 };
@@ -1371,42 +1347,35 @@ const drawGaugesForSwingState = swingState => {
     }
 };
 
-const getCollision = () => {
-    let collisionResult = 'FAIRWAY';
+/**
+ * Returns the key of the surface type found at the given position
+ * @param {number} x - x position in bitmap pixels
+ * @param {number} y - y position in bitmap pixels
+ * @returns {string} key of SurfaceTypes
+ */
+const getSurfaceAt = (x, y) => {
+    let surface = 'FAIRWAY';
     let outOfBounds = false;
+
+    // check if the position didnt exceed the collision map boundaries
+    if (x > 370 || y > 140) {
+        return 'OUT';
+    }
 
     // iterate over collision maps and see if there is a hit
     collisionMaps.forEach(collisionMap => {
         const mapId = collisionMap.collisionMap.id;
 
-        if (collisionMap.checkHit(state.baseCollisionMap, state.player, images.filter(img => img.id === 'hole1')[0])) {
+        if (collisionMap.checkHit(state.baseCollisionMap, { x, y }, images.filter(img => img.id === 'hole1')[0])) {
             if (mapId === 'OUT') {
                 outOfBounds = true;
             } else {
-                collisionResult = SurfaceTypes[mapId];
+                surface = mapId;
             }
         }
     });
 
-    // check if player didnt exceed the collision map boundaries
-    if (state.player.x > 370 || state.player.y > 140) {
-        outOfBounds = true;
-    }
-
-    // for the ouf-of-bounds state, perform some extra steps
-    if (outOfBounds) {
-        inGameTexts.push(new InGameText(context, images.filter(img => img.id === 'out-of-bounds')[0], state.inGameTextTimeOut));
-
-        helpers.Sound.playSound(sounds.filter(soundObj => soundObj.id === 'out_of_bounds'), false);
-
-        // reset to old position
-        state.player.x = state.player.oldX;
-        state.player.y = state.player.oldY;
-
-        endBallFlight();
-    }
-
-    return collisionResult;
+    return outOfBounds ? 'OUT' : surface;
 };
 
 const drawPanels = () => {
@@ -1593,6 +1562,12 @@ const getDistanceToFlag = (x1, y1, x2, y2) => {
  * Perform all timely actions required for the current scene
  */
 const update = () => {
+
+    // time passed since the previous frame in seconds (capped, so a hiccup or inactive tab does not result in a jump)
+    const now = performance.now();
+    const dt = Math.min((now - lastFrameTime) / 1000, .05);
+    lastFrameTime = now;
+
     helpers.Canvas.clearCanvas(context, '#17411D');
 
     switch (state.scene) {
@@ -1719,6 +1694,12 @@ const update = () => {
             break;
 
         case Scenes.GAME:
+
+            // move the ball before anything is drawn (the surface look-ups use the canvas as a scratchpad)
+            if (flight) {
+                updateBallFlight(dt);
+            }
+
             sky.draw(Skies.BLUE, state, true, true);
 
             // prevent visible projection corners
@@ -1758,10 +1739,10 @@ const update = () => {
             drawPanelContent(state.panels.right, 'right');
 
             // ball flight animation
-            if (state.swingState === SwingStates.FLIGHT) {
-                drawBallFlight(state.player.power);
-            } else if (state.swingState === SwingStates.BOUNCE) {
-                drawBounce();
+            if (flight) {
+                if (state.panels.right.visible) {
+                    drawBallFlightFromSide();
+                }
             } else {
 
                 // when not in ball flight, update distance

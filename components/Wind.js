@@ -42,7 +42,8 @@ export default class Wind {
         context.save();
         context.translate(32, 52);
 
-        angle += playerAngle;
+        // the marker sits on the side the wind is coming from and points to where it is blowing, relative to the view
+        angle = playerAngle - angle + 180;
 
         context.rotate(angle * Math.PI / 180);
 
